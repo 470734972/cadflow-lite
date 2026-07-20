@@ -15,6 +15,7 @@
       <button class="nav" data-view="queues">队列</button>
       <button class="nav" data-view="hosts">节点</button>
       <button class="nav" data-view="licenses">License</button>
+      <button class="nav" data-view="config">配置</button>
     </nav>
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small></div></div>
   </aside>
@@ -34,8 +35,8 @@
     <section id="queues" class="view"><div id="queueCards" class="card-grid"></div></section>
     <section id="hosts" class="view"><div id="hostCards" class="card-grid"></div></section>
     <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License容量</h2><span>FlexNet</span></div><div id="licenseRows" class="license-list"></div></article></section>
+    <section id="config" class="view"><article class="panel"><div class="panel-title"><h2>LSF / FlexNet 配置</h2><span>保存时执行 LSF 预检</span></div><form id="configForm"><div class="form-grid"><label>运行模式<select name="mode"><option value="demo">Demo</option><option value="lsf">LSF</option></select></label><label>集群名称<input name="cluster_name" required></label><label>LSF Bin 目录<input name="lsf_bin_dir" placeholder="/opt/lsf/.../bin"></label><label>lmstat 完整路径<input name="lmstat_path" placeholder="/opt/flexnet/bin/lmstat"></label><label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"></label><label>License Vendor<input name="license_vendor" placeholder="snpslmd"></label><label>采集间隔（秒）<input name="collect_interval_seconds" type="number" min="15"></label><label>命令超时（秒）<input name="command_timeout_seconds" type="number" min="1"></label><label>陈旧阈值（秒，0=自动）<input name="stale_after_seconds" type="number" min="0"></label></div><label>LSF 环境变量（每行 KEY=VALUE，仅允许 LSF_*、PATH、LD_LIBRARY_PATH）<textarea name="lsf_env" rows="6"></textarea></label><div><button type="submit">保存并预检 LSF</button><small id="configMessage"></small></div></form></article></section>
   </main>
   <script src="/static/app.js"></script>
 </body>
 </html>
-

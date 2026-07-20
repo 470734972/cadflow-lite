@@ -16,6 +16,7 @@ from app.main import app
 def test_health_and_summary():
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
+        assert client.get("/api/config").json()["mode"] == "demo"
         summary = client.get("/api/summary").json()
         assert summary["cluster"] == "eda-lab"
         assert summary["totals"]["hosts"] == 8

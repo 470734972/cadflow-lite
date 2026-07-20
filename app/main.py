@@ -2,36 +2,90 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .collectors import DemoCollector, LsfCollector
-from .config import settings
+from .collectors.base import Collector
+from .config import RuntimeConfig, settings
 from .db import Database
 from .services import CollectionService, build_alerts, build_summary
 
 
+class SetupCollector(Collector):
+    def collect(self) -> dict[str, list[dict[str, Any]]]:
+        return {"jobs": [], "queues": [], "hosts": [], "licenses": []}
+
+
+class Runtime:
+    """Hot-loadable, persisted runtime settings for the lab setup wizard."""
+
+    def __init__(self, database: Database, initial: RuntimeConfig):
+        self.db = database
+        self._lock = threading.RLock()
+        self.config = initial
+        self.service = self._make_service(initial)
+
+    def load(self) -> None:
+        stored = self.db.load_config("runtime")
+        if stored:
+            self.config = RuntimeConfig.from_dict(stored)
+            self.service = self._make_service(self.config)
+        else:
+            self.db.save_config("runtime", self.config.to_dict())
+
+    def _make_service(self, config: RuntimeConfig) -> CollectionService:
+        if config.mode == "demo":
+            collector: Collector = DemoCollector(config.cluster_name)
+        elif config.mode == "lsf":
+            collector = LsfCollector(
+                config.command_timeout_seconds,
+                config.lmstat_path,
+                config.license_servers,
+                config.lsf_bin_dir,
+                config.license_vendor,
+                config.lsf_env,
+            )
+        else:
+            collector = SetupCollector()
+        return CollectionService(self.db, collector, config.cluster_name)
+
+    def update(self, payload: dict[str, Any]) -> dict[str, Any]:
+        candidate = RuntimeConfig.from_dict(payload)
+        candidate_service = self._make_service(candidate)
+        # A real LSF configuration is validated before becoming the active configuration.
+        if candidate.mode == "lsf":
+            result = candidate_service.run()
+            if not result["ok"]:
+                raise ValueError(result["error"])
+        with self._lock:
+            self.config = candidate
+            self.service = candidate_service
+            self.db.save_config("runtime", candidate.to_dict())
+        return candidate.to_dict()
+
+    def collect(self) -> dict[str, Any]:
+        if self.config.mode == "setup":
+            return {"ok": False, "error": "complete the LSF configuration first", "duration_ms": 0}
+        return self.service.run()
+
+
 settings.validate()
 db = Database(settings.db_path)
-collector = DemoCollector(settings.cluster_name) if settings.mode == "demo" else LsfCollector(
-    settings.command_timeout_seconds,
-    settings.lmstat_path,
-    settings.license_servers,
-    settings.lsf_bin_dir,
-    settings.license_vendor,
-)
-service = CollectionService(db, collector, settings.cluster_name)
+runtime = Runtime(db, RuntimeConfig.from_settings(settings))
 
 
 async def collection_loop() -> None:
     while True:
-        await asyncio.sleep(settings.collect_interval_seconds)
-        await asyncio.to_thread(service.run)
+        await asyncio.sleep(runtime.config.collect_interval_seconds)
+        await asyncio.to_thread(runtime.collect)
 
 
 def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
@@ -41,14 +95,15 @@ def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
         return {"freshness": "failed", "age_seconds": -1}
     collected_at = datetime.fromisoformat(status["collected_at"].replace("Z", "+00:00"))
     age_seconds = max(0, int((datetime.now(timezone.utc) - collected_at).total_seconds()))
-    return {"freshness": "stale" if age_seconds > settings.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
+    return {"freshness": "stale" if age_seconds > runtime.config.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.initialize()
-    if db.latest_snapshot_id(settings.cluster_name) is None:
-        await asyncio.to_thread(service.run)
+    runtime.load()
+    if runtime.config.mode != "setup" and db.latest_snapshot_id(runtime.config.cluster_name) is None:
+        await asyncio.to_thread(runtime.collect)
     task = asyncio.create_task(collection_loop())
     try:
         yield
@@ -60,7 +115,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="CADFlow Lite", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="CADFlow Lite", version="0.2.0", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -70,27 +125,40 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
+@app.get("/api/config")
+def get_config() -> dict[str, Any]:
+    return runtime.config.to_dict()
+
+
+@app.put("/api/config")
+def update_config(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return runtime.update(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/health")
-def health() -> dict:
-    status = db.snapshot_status(settings.cluster_name)
+def health() -> dict[str, Any]:
+    status = db.snapshot_status(runtime.config.cluster_name)
     freshness = snapshot_freshness(status)
     return {
-        "status": "ok" if freshness["freshness"] == "fresh" else "degraded",
-        "mode": settings.mode,
-        "cluster": settings.cluster_name,
+        "status": "setup" if runtime.config.mode == "setup" else "ok" if freshness["freshness"] == "fresh" else "degraded",
+        "mode": runtime.config.mode,
+        "cluster": runtime.config.cluster_name,
         "snapshot": status,
         **freshness,
     }
 
 
 @app.get("/api/summary")
-def summary() -> dict:
-    return build_summary(db, settings.cluster_name)
+def summary() -> dict[str, Any]:
+    return build_summary(db, runtime.config.cluster_name)
 
 
 @app.get("/api/jobs")
 def jobs(status: str | None = None, user: str | None = None, queue: str | None = None, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
-    rows = db.latest_rows("jobs", settings.cluster_name)
+    rows = db.latest_rows("jobs", runtime.config.cluster_name)
     if status:
         rows = [row for row in rows if row["status"].lower() == status.lower()]
     if user:
@@ -102,34 +170,34 @@ def jobs(status: str | None = None, user: str | None = None, queue: str | None =
 
 @app.get("/api/queues")
 def queues() -> list[dict]:
-    return db.latest_rows("queues", settings.cluster_name)
+    return db.latest_rows("queues", runtime.config.cluster_name)
 
 
 @app.get("/api/hosts")
 def hosts() -> list[dict]:
-    return db.latest_rows("hosts", settings.cluster_name)
+    return db.latest_rows("hosts", runtime.config.cluster_name)
 
 
 @app.get("/api/licenses")
 def licenses() -> list[dict]:
-    return db.latest_rows("licenses", settings.cluster_name)
+    return db.latest_rows("licenses", runtime.config.cluster_name)
 
 
 @app.get("/api/alerts")
 def alerts() -> list[dict]:
-    return build_alerts(db, settings.cluster_name)
+    return build_alerts(db, runtime.config.cluster_name)
 
 
 @app.get("/api/history")
 def history(limit: int = Query(48, ge=2, le=500)) -> list[dict]:
-    return db.history(settings.cluster_name, limit)
+    return db.history(runtime.config.cluster_name, limit)
 
 
 @app.post("/api/collect")
-def collect(x_admin_token: str = Header(default="")) -> dict:
+def collect(x_admin_token: str = Header(default="")) -> dict[str, Any]:
     if settings.admin_token and not hmac.compare_digest(x_admin_token, settings.admin_token):
         raise HTTPException(status_code=403, detail="invalid admin token")
-    result = service.run()
+    result = runtime.collect()
     if result.get("busy"):
         raise HTTPException(status_code=409, detail=result["error"])
     if not result["ok"]:
@@ -139,19 +207,19 @@ def collect(x_admin_token: str = Header(default="")) -> dict:
 
 @app.get("/metrics", response_class=PlainTextResponse)
 def metrics() -> str:
-    summary_data = build_summary(db, settings.cluster_name)
+    summary_data = build_summary(db, runtime.config.cluster_name)
     totals, efficiency = summary_data["totals"], summary_data["efficiency"]
     lines = [
         "# HELP cadflow_jobs Current jobs by status", "# TYPE cadflow_jobs gauge",
-        f'cadflow_jobs{{cluster="{settings.cluster_name}",status="running"}} {totals["running_jobs"]}',
-        f'cadflow_jobs{{cluster="{settings.cluster_name}",status="pending"}} {totals["pending_jobs"]}',
-        f'cadflow_jobs{{cluster="{settings.cluster_name}",status="exit"}} {totals["exit_jobs"]}',
+        f'cadflow_jobs{{cluster="{runtime.config.cluster_name}",status="running"}} {totals["running_jobs"]}',
+        f'cadflow_jobs{{cluster="{runtime.config.cluster_name}",status="pending"}} {totals["pending_jobs"]}',
+        f'cadflow_jobs{{cluster="{runtime.config.cluster_name}",status="exit"}} {totals["exit_jobs"]}',
         "# HELP cadflow_resource_utilization_pct Resource utilization percent", "# TYPE cadflow_resource_utilization_pct gauge",
-        f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="cpu"}} {efficiency["cpu_pct"]}',
-        f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="memory"}} {efficiency["mem_pct"]}',
-        f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="slot"}} {efficiency["slot_pct"]}',
+        f'cadflow_resource_utilization_pct{{cluster="{runtime.config.cluster_name}",resource="cpu"}} {efficiency["cpu_pct"]}',
+        f'cadflow_resource_utilization_pct{{cluster="{runtime.config.cluster_name}",resource="memory"}} {efficiency["mem_pct"]}',
+        f'cadflow_resource_utilization_pct{{cluster="{runtime.config.cluster_name}",resource="slot"}} {efficiency["slot_pct"]}',
         "# HELP cadflow_collection_fresh Whether the most recent collection is fresh (1) or stale/failed (0)",
         "# TYPE cadflow_collection_fresh gauge",
-        f'cadflow_collection_fresh{{cluster="{settings.cluster_name}"}} {1 if snapshot_freshness(db.snapshot_status(settings.cluster_name))["freshness"] == "fresh" else 0}',
+        f'cadflow_collection_fresh{{cluster="{runtime.config.cluster_name}"}} {1 if snapshot_freshness(db.snapshot_status(runtime.config.cluster_name))["freshness"] == "fresh" else 0}',
     ]
     return "\n".join(lines) + "\n"

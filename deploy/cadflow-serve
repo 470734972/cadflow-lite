@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${CADFLOW_LSF_PROFILE:?CADFLOW_LSF_PROFILE must name the site LSF environment file}"
-test -r "$CADFLOW_LSF_PROFILE"
-# shellcheck disable=SC1090
-source "$CADFLOW_LSF_PROFILE"
+if [[ "${CADFLOW_MODE:-demo}" == "lsf" && -n "${CADFLOW_LSF_PROFILE:-}" ]]; then
+  test -r "$CADFLOW_LSF_PROFILE"
+  # shellcheck disable=SC1090
+  source "$CADFLOW_LSF_PROFILE"
+fi
 
-exec /opt/cadflow/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+exec /opt/cadflow/.venv/bin/uvicorn app.main:app --host "${CADFLOW_BIND_HOST:-0.0.0.0}" --port "${CADFLOW_PORT:-8080}"

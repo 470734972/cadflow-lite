@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
     error TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     snapshot_id INTEGER NOT NULL,
     job_id TEXT NOT NULL,
@@ -120,6 +125,18 @@ class Database:
                 (cluster, collected_at, duration_ms, error[:1000]),
             )
 
+    def load_config(self, key: str) -> dict[str, Any] | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT value FROM app_config WHERE key=?", (key,)).fetchone()
+            return json.loads(row["value"]) if row else None
+
+    def save_config(self, key: str, value: dict[str, Any]) -> None:
+        with self._lock, self.connect() as conn:
+            conn.execute(
+                "INSERT INTO app_config(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, json.dumps(value, ensure_ascii=False)),
+            )
+
     @staticmethod
     def _insert_many(conn: sqlite3.Connection, table: str, snapshot_id: int, rows: Iterable[dict[str, Any]]) -> None:
         rows = list(rows)
@@ -175,4 +192,3 @@ class Database:
 
     def dump_debug(self, cluster: str) -> str:
         return json.dumps({table: self.latest_rows(table, cluster) for table in ("jobs", "queues", "hosts", "licenses")})
-

@@ -18,6 +18,18 @@
 
 ## 立即体验
 
+### Rocky Linux 10.2 一键安装与 Web 配置
+
+在 Rocky 10.2 的项目源码目录中执行一次安装。安装脚本创建 systemd 服务、Python 虚拟环境、数据目录并放行实验网络的 TCP/8080；服务默认以 Demo 模式启动，不需要预先安装 LSF。
+
+```bash
+sudo bash deploy/install-rocky10.sh
+```
+
+安装结束后浏览器访问 `http://ROCKY_IP:8080`，在侧边栏 **配置** 页面填写 LSF Bin 目录、`lmstat` 路径、License Server、Vendor 和所需的 `LSF_*` 环境变量。点击“保存并预检 LSF”后，CADFlow 会用固定的只读命令验证 `bjobs`、`bqueues`、`bhosts`、`lsload` 和 `lmstat`；预检通过才切换为 LSF 采集，失败则保留旧配置。
+
+一键安装适用于实验网络：它监听 `0.0.0.0:8080`，将作业、项目、主机和 License 信息暴露给可访问该端口的用户。生产环境请改为 `127.0.0.1` 并经企业网关提供 TLS 和认证。
+
 ### Docker Compose
 
 ```bash

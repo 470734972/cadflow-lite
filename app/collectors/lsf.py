@@ -5,7 +5,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .base import Collector
 
@@ -23,10 +23,11 @@ class SafeRunner:
 
     ALLOWED = {"bjobs", "bqueues", "bhosts", "lsload", "lmstat"}
 
-    def __init__(self, timeout: int = 20, lsf_bin_dir: Path | None = None, lmstat_path: Path | None = None):
+    def __init__(self, timeout: int = 20, lsf_bin_dir: Path | None = None, lmstat_path: Path | None = None, extra_env: Mapping[str, str] | None = None):
         self.timeout = timeout
         self.lsf_bin_dir = lsf_bin_dir.resolve() if lsf_bin_dir else None
         self.lmstat_path = lmstat_path.resolve() if lmstat_path else None
+        self.extra_env = dict(extra_env or {})
 
     def _resolve(self, command: str) -> str:
         name = Path(command).name
@@ -55,6 +56,7 @@ class SafeRunner:
         env = os.environ.copy()
         env["LC_ALL"] = "C"
         env["LANG"] = "C"
+        env.update(self.extra_env)
         try:
             result = subprocess.run(
                 [executable, *argv[1:]], capture_output=True, text=True, timeout=self.timeout, check=False, env=env
@@ -166,12 +168,14 @@ class LsfCollector(Collector):
         license_servers: tuple[str, ...],
         lsf_bin_dir: str = "",
         license_vendor: str = "",
+        lsf_env: Mapping[str, str] | None = None,
         runner: SafeRunner | None = None,
     ):
         self.runner = runner or SafeRunner(
             timeout,
             Path(lsf_bin_dir) if lsf_bin_dir else None,
             Path(lmstat_path) if lmstat_path else None,
+            lsf_env,
         )
         self.license_servers = license_servers
         self.license_vendor = license_vendor

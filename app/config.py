@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
@@ -46,3 +46,64 @@ class Settings:
 
 
 settings = Settings()
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    mode: str
+    cluster_name: str
+    collect_interval_seconds: int
+    command_timeout_seconds: int
+    stale_after_seconds: int
+    lsf_bin_dir: str
+    lmstat_path: str
+    license_servers: tuple[str, ...]
+    license_vendor: str
+    lsf_env: dict[str, str]
+
+    @classmethod
+    def from_settings(cls, source: Settings) -> "RuntimeConfig":
+        return cls(source.mode, source.cluster_name, source.collect_interval_seconds, source.command_timeout_seconds,
+                   source.stale_after_seconds, source.lsf_bin_dir, source.lmstat_path, source.license_servers,
+                   source.license_vendor, {})
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RuntimeConfig":
+        servers = data.get("license_servers", ())
+        if isinstance(servers, str):
+            servers = tuple(item.strip() for item in servers.split(",") if item.strip())
+        env = data.get("lsf_env", {})
+        if not isinstance(env, dict):
+            raise ValueError("lsf_env must be an object")
+        allowed = {key: str(value) for key, value in env.items() if key.startswith("LSF_") or key in {"PATH", "LD_LIBRARY_PATH"}}
+        if len(allowed) != len(env):
+            raise ValueError("lsf_env only permits LSF_*, PATH and LD_LIBRARY_PATH")
+        config = cls(
+            str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "eda-lab")).strip(),
+            int(data.get("collect_interval_seconds", 300)), int(data.get("command_timeout_seconds", 45)),
+            int(data.get("stale_after_seconds", 0)), str(data.get("lsf_bin_dir", "")).strip(),
+            str(data.get("lmstat_path", "")).strip(), tuple(servers), str(data.get("license_vendor", "")).strip(), allowed,
+        )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        if self.mode not in {"setup", "demo", "lsf"}:
+            raise ValueError("mode must be setup, demo or lsf")
+        if not self.cluster_name:
+            raise ValueError("cluster_name is required")
+        if self.collect_interval_seconds < 15:
+            raise ValueError("collection interval must be at least 15 seconds")
+        if self.command_timeout_seconds < 1:
+            raise ValueError("command timeout must be at least 1 second")
+        if self.mode == "lsf" and not self.lsf_bin_dir:
+            raise ValueError("lsf_bin_dir is required in lsf mode")
+
+    def to_dict(self) -> dict:
+        data = asdict(self)
+        data["license_servers"] = list(self.license_servers)
+        return data
+
+    @property
+    def effective_stale_after_seconds(self) -> int:
+        return self.stale_after_seconds or self.collect_interval_seconds * 2 + self.command_timeout_seconds
