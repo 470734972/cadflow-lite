@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${CADFLOW_LSF_PROFILE:?CADFLOW_LSF_PROFILE must name the site LSF environment file}"
+test -r "$CADFLOW_LSF_PROFILE"
+# shellcheck disable=SC1090
+source "$CADFLOW_LSF_PROFILE"
+
+exec /opt/cadflow/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080

@@ -1,19 +1,16 @@
 import os
+import tempfile
 from pathlib import Path
 
 os.environ["CADFLOW_MODE"] = "demo"
-os.environ["CADFLOW_DB_PATH"] = "/tmp/cadflow-lite-test.db"
+TEST_DB_PATH = Path(tempfile.gettempdir()) / f"cadflow-lite-test-{os.getpid()}.db"
+TEST_DB_PATH.unlink(missing_ok=True)
+os.environ["CADFLOW_DB_PATH"] = str(TEST_DB_PATH)
 os.environ["CADFLOW_ADMIN_TOKEN"] = "test-token"
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-
-
-def setup_module():
-    path = Path("/tmp/cadflow-lite-test.db")
-    if path.exists():
-        path.unlink()
 
 
 def test_health_and_summary():
@@ -29,4 +26,3 @@ def test_collect_requires_token():
     with TestClient(app) as client:
         assert client.post("/api/collect").status_code == 403
         assert client.post("/api/collect", headers={"X-Admin-Token": "test-token"}).status_code == 200
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,8 +14,11 @@ class CollectionService:
         self.db = db
         self.collector = collector
         self.cluster = cluster
+        self._run_lock = threading.Lock()
 
     def run(self) -> dict[str, Any]:
+        if not self._run_lock.acquire(blocking=False):
+            return {"ok": False, "busy": True, "error": "collection already in progress", "duration_ms": 0}
         started = time.monotonic()
         collected_at = datetime.now(timezone.utc).isoformat()
         try:
@@ -26,6 +30,8 @@ class CollectionService:
             duration_ms = int((time.monotonic() - started) * 1000)
             self.db.save_failure(self.cluster, collected_at, str(exc), duration_ms)
             return {"ok": False, "error": str(exc), "duration_ms": duration_ms}
+        finally:
+            self._run_lock.release()
 
 
 def build_summary(db: Database, cluster: str) -> dict[str, Any]:
@@ -73,4 +79,3 @@ def build_alerts(db: Database, cluster: str) -> list[dict[str, str]]:
         elif ratio >= 0.85:
             alerts.append({"severity": "warning", "source": item["feature"], "message": f"License usage is {ratio:.0%}"})
     return alerts
-

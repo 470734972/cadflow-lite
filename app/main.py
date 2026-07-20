@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -18,15 +19,29 @@ from .services import CollectionService, build_alerts, build_summary
 settings.validate()
 db = Database(settings.db_path)
 collector = DemoCollector(settings.cluster_name) if settings.mode == "demo" else LsfCollector(
-    settings.command_timeout_seconds, settings.lmstat_path, settings.license_servers
+    settings.command_timeout_seconds,
+    settings.lmstat_path,
+    settings.license_servers,
+    settings.lsf_bin_dir,
+    settings.license_vendor,
 )
 service = CollectionService(db, collector, settings.cluster_name)
 
 
 async def collection_loop() -> None:
     while True:
-        await asyncio.to_thread(service.run)
         await asyncio.sleep(settings.collect_interval_seconds)
+        await asyncio.to_thread(service.run)
+
+
+def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
+    if not status:
+        return {"freshness": "never", "age_seconds": -1}
+    if status["status"] != "ok":
+        return {"freshness": "failed", "age_seconds": -1}
+    collected_at = datetime.fromisoformat(status["collected_at"].replace("Z", "+00:00"))
+    age_seconds = max(0, int((datetime.now(timezone.utc) - collected_at).total_seconds()))
+    return {"freshness": "stale" if age_seconds > settings.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
 
 
 @asynccontextmanager
@@ -58,7 +73,14 @@ def index() -> FileResponse:
 @app.get("/api/health")
 def health() -> dict:
     status = db.snapshot_status(settings.cluster_name)
-    return {"status": "ok" if status and status["status"] == "ok" else "degraded", "mode": settings.mode, "cluster": settings.cluster_name, "snapshot": status}
+    freshness = snapshot_freshness(status)
+    return {
+        "status": "ok" if freshness["freshness"] == "fresh" else "degraded",
+        "mode": settings.mode,
+        "cluster": settings.cluster_name,
+        "snapshot": status,
+        **freshness,
+    }
 
 
 @app.get("/api/summary")
@@ -108,6 +130,8 @@ def collect(x_admin_token: str = Header(default="")) -> dict:
     if settings.admin_token and not hmac.compare_digest(x_admin_token, settings.admin_token):
         raise HTTPException(status_code=403, detail="invalid admin token")
     result = service.run()
+    if result.get("busy"):
+        raise HTTPException(status_code=409, detail=result["error"])
     if not result["ok"]:
         raise HTTPException(status_code=503, detail=result["error"])
     return result
@@ -126,6 +150,8 @@ def metrics() -> str:
         f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="cpu"}} {efficiency["cpu_pct"]}',
         f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="memory"}} {efficiency["mem_pct"]}',
         f'cadflow_resource_utilization_pct{{cluster="{settings.cluster_name}",resource="slot"}} {efficiency["slot_pct"]}',
+        "# HELP cadflow_collection_fresh Whether the most recent collection is fresh (1) or stale/failed (0)",
+        "# TYPE cadflow_collection_fresh gauge",
+        f'cadflow_collection_fresh{{cluster="{settings.cluster_name}"}} {1 if snapshot_freshness(db.snapshot_status(settings.cluster_name))["freshness"] == "fresh" else 0}',
     ]
     return "\n".join(lines) + "\n"
-

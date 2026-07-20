@@ -1,12 +1,30 @@
-from app.collectors.lsf import SafeRunner, parse_lmstat, parse_pipe_table
+import pytest
+
+from app.collectors.lsf import LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table
 
 
 def test_parse_pipe_table():
-    text = "840101|alice|RUN|normal|compute01|8|4G|12G|3600|orion\n"
-    columns = ["job_id", "user", "status", "queue", "exec_host", "slots", "used_mem", "max_mem", "runtime", "project"]
+    text = "840101|alice|RUN|normal|compute01|8|12G|01:00:00|orion\n"
+    columns = ["job_id", "user", "status", "queue", "exec_host", "slots", "max_mem", "runtime", "project"]
     rows = parse_pipe_table(text, columns)
     assert rows[0]["job_id"] == "840101"
     assert rows[0]["project"] == "orion"
+
+
+def test_pipe_table_rejects_unexpected_lsf_format():
+    with pytest.raises(ParseError, match="expected 2 columns"):
+        parse_pipe_table("840101|alice|RUN\n", ["job_id", "user"])
+
+
+def test_duration_and_lsload_parsing():
+    assert parse_duration_seconds("01:02:03") == 3723
+    assert parse_duration_seconds("2:01:02:03") == 176523
+    assert parse_duration_seconds("-") == 0
+    loads = parse_lsload(
+        "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\n"
+        "compute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n"
+    )
+    assert loads == {"compute01": {"cpu_pct": 72, "load_15m": 0.3}}
 
 
 def test_parse_lmstat():
@@ -23,3 +41,24 @@ def test_runner_rejects_non_allowlisted_command():
     else:
         raise AssertionError("unsafe command was accepted")
 
+
+def test_lsf_collector_uses_real_command_contract_without_inventing_requested_memory():
+    class FakeRunner:
+        def check_available(self, commands):
+            return {command: f"/opt/lsf/bin/{command}" for command in commands}
+
+        def run(self, argv):
+            outputs = {
+                "bjobs": "1|alice|RUN|normal|compute01|8|12G|01:00:00|orion\n",
+                "bqueues": "normal|Open:Active|64|8|3|0\n",
+                "bhosts": "compute01|ok|64|8\n",
+                "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
+                "lmstat": "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)\n",
+            }
+            return outputs[argv[0]]
+
+    payload = LsfCollector(20, "/opt/flexnet/lmstat", ("27000@license01",), license_vendor="snpslmd", runner=FakeRunner()).collect()
+    assert payload["jobs"][0]["runtime_seconds"] == 3600
+    assert payload["jobs"][0]["requested_mem_mb"] == 0
+    assert payload["hosts"][0]["cpu_pct"] == 72
+    assert payload["licenses"][0]["vendor"] == "snpslmd"
