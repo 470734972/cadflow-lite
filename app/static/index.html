@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CADFlow Lite</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">CF</span><div><b>CADFlow</b><small>EDA Compute Insight</small></div></div>
+    <nav>
+      <button class="nav active" data-view="overview">总览</button>
+      <button class="nav" data-view="jobs">作业</button>
+      <button class="nav" data-view="queues">队列</button>
+      <button class="nav" data-view="hosts">节点</button>
+      <button class="nav" data-view="licenses">License</button>
+    </nav>
+    <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small></div></div>
+  </aside>
+  <main>
+    <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与EDA License统一观测</p></div><button id="refreshBtn">刷新数据</button></header>
+
+    <section id="overview" class="view active">
+      <div id="kpis" class="kpi-grid"></div>
+      <div class="grid two">
+        <article class="panel"><div class="panel-title"><h2>资源利用率</h2><span>Latest</span></div><div id="gauges" class="gauges"></div></article>
+        <article class="panel"><div class="panel-title"><h2>活动告警</h2><span id="alertCount">0</span></div><div id="alerts" class="alert-list"></div></article>
+      </div>
+      <article class="panel"><div class="panel-title"><h2>队列负载趋势</h2><span>最近48次采集</span></div><canvas id="historyChart" height="230"></canvas></article>
+    </section>
+
+    <section id="jobs" class="view"><article class="panel"><div class="panel-title"><h2>最近作业</h2><select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>执行节点</th><th>Slots</th><th>内存效率</th><th>CPU效率</th></tr></thead><tbody id="jobRows"></tbody></table></div></article></section>
+    <section id="queues" class="view"><div id="queueCards" class="card-grid"></div></section>
+    <section id="hosts" class="view"><div id="hostCards" class="card-grid"></div></section>
+    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License容量</h2><span>FlexNet</span></div><div id="licenseRows" class="license-list"></div></article></section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

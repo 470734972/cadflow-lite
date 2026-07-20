@@ -1,0 +1,23 @@
+services:
+  cadflow-lite:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      CADFLOW_MODE: demo
+      CADFLOW_CLUSTER_NAME: eda-lab
+      CADFLOW_DB_PATH: /opt/cadflow/data/cadflow.db
+      CADFLOW_ADMIN_TOKEN: ${CADFLOW_ADMIN_TOKEN:-change-me}
+      CADFLOW_COLLECT_INTERVAL_SECONDS: 60
+    volumes:
+      - cadflow-data:/opt/cadflow/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  cadflow-data:
+
