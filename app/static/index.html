@@ -20,7 +20,7 @@
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small></div></div>
   </aside>
   <main>
-    <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与EDA License统一观测</p></div><button id="refreshBtn">刷新数据</button></header>
+    <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><button id="refreshBtn">刷新数据</button></header>
 
     <section id="overview" class="view active">
       <div id="kpis" class="kpi-grid"></div>
@@ -28,14 +28,55 @@
         <article class="panel"><div class="panel-title"><h2>资源利用率</h2><span>Latest</span></div><div id="gauges" class="gauges"></div></article>
         <article class="panel"><div class="panel-title"><h2>活动告警</h2><span id="alertCount">0</span></div><div id="alerts" class="alert-list"></div></article>
       </div>
-      <article class="panel"><div class="panel-title"><h2>队列负载趋势</h2><span>最近48次采集</span></div><canvas id="historyChart" height="230"></canvas></article>
+      <article class="panel"><div class="panel-title"><h2>队列负载趋势</h2><span>最近 8 次采集</span></div><canvas id="historyChart" height="230"></canvas></article>
     </section>
 
-    <section id="jobs" class="view"><article class="panel"><div class="panel-title"><h2>最近作业</h2><select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>执行节点</th><th>Slots</th><th>内存效率</th><th>CPU效率</th></tr></thead><tbody id="jobRows"></tbody></table></div></article></section>
+    <section id="jobs" class="view"><article class="panel"><div class="panel-title"><h2>最近作业</h2><select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>执行节点</th><th>Slots</th><th>内存效率</th><th>CPU 效率</th></tr></thead><tbody id="jobRows"></tbody></table></div></article></section>
     <section id="queues" class="view"><div id="queueCards" class="card-grid"></div></section>
     <section id="hosts" class="view"><div id="hostCards" class="card-grid"></div></section>
-    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License容量</h2><span>FlexNet</span></div><div id="licenseRows" class="license-list"></div></article></section>
-    <section id="config" class="view"><article class="panel"><div class="panel-title"><h2>LSF / FlexNet 配置</h2><span>保存时执行 LSF 预检</span></div><form id="configForm"><div class="form-grid"><label>运行模式<select name="mode"><option value="demo">Demo</option><option value="lsf">LSF</option></select></label><label>集群名称<input name="cluster_name" required></label><label>LSF Bin 目录<input name="lsf_bin_dir" placeholder="/opt/lsf/.../bin"></label><label>lmstat 完整路径<input name="lmstat_path" placeholder="/opt/flexnet/bin/lmstat"></label><label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"></label><label>License Vendor<input name="license_vendor" placeholder="snpslmd"></label><label>采集间隔（秒）<input name="collect_interval_seconds" type="number" min="15"></label><label>命令超时（秒）<input name="command_timeout_seconds" type="number" min="1"></label><label>陈旧阈值（秒，0=自动）<input name="stale_after_seconds" type="number" min="0"></label></div><label>LSF 环境变量（每行 KEY=VALUE，仅允许 LSF_*、PATH、LD_LIBRARY_PATH）<textarea name="lsf_env" rows="6"></textarea></label><div><button type="submit">保存并预检 LSF</button><small id="configMessage"></small></div></form></article></section>
+    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License 容量</h2><span>FlexNet</span></div><div id="licenseRows" class="license-list"></div></article></section>
+
+    <section id="config" class="view">
+      <div class="config-intro">
+        <div><span class="eyebrow">DATA SOURCE SETUP</span><h2>采集源配置</h2><p>LSF 作业调度与 FlexNet License 采集独立管理；保存后会执行 LSF 预检。</p></div>
+        <span class="config-state">配置实时生效</span>
+      </div>
+      <form id="configForm" class="config-form">
+        <section class="config-section general-section">
+          <div class="section-heading"><div class="section-icon">01</div><div><h3>通用设置</h3><p>定义本实例的运行方式与展示名称。</p></div></div>
+          <div class="form-grid general-grid">
+            <label>运行模式<select name="mode"><option value="demo">Demo</option><option value="lsf">LSF</option></select><small>Demo 使用样例数据；LSF 从本机命令采集。</small></label>
+            <label>集群名称<input name="cluster_name" required><small>显示在页面状态和采集快照中。</small></label>
+          </div>
+        </section>
+
+        <div class="collector-grid">
+          <section class="config-section collector-section lsf-section">
+            <div class="section-heading"><div class="section-icon">LSF</div><div><h3>LSF 调度器</h3><p>作业、队列和计算节点数据来源。</p></div></div>
+            <label>LSF Bin 目录<input name="lsf_bin_dir" placeholder="/opt/lsf/10.1/linux3.10-glibc2.17-x86_64/bin"><small>包含 bjobs、bqueues、bhosts 与 lsload。</small></label>
+            <label class="textarea-label">LSF 环境变量<textarea name="lsf_env" rows="7" placeholder="LSF_ENVDIR=/etc/lsf.conf&#10;PATH=/opt/lsf/.../bin:$PATH"></textarea><small>每行一个 KEY=VALUE；只允许 LSF_*、PATH、LD_LIBRARY_PATH。</small></label>
+          </section>
+
+          <section class="config-section collector-section flexnet-section">
+            <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License</h3><p>EDA License 特征和容量数据来源。</p></div></div>
+            <label>lmstat 完整路径<input name="lmstat_path" placeholder="/opt/flexnet/bin/lmstat"><small>指定可执行 lmstat 的绝对路径。</small></label>
+            <label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"><small>多个服务器以英文逗号分隔。</small></label>
+            <label>License Vendor<input name="license_vendor" placeholder="snpslmd"><small>例如 snpslmd、cdslmd 或 mgcld。</small></label>
+          </section>
+        </div>
+
+        <section class="config-section schedule-section">
+          <div class="section-heading"><div class="section-icon">04</div><div><h3>采集策略</h3><p>控制采集频率、命令等待时间和数据时效判定。</p></div></div>
+          <div class="form-grid schedule-grid">
+            <label>采集间隔（秒）<input name="collect_interval_seconds" type="number" min="15"><small>建议生产环境不低于 60 秒。</small></label>
+            <label>命令超时（秒）<input name="command_timeout_seconds" type="number" min="1"><small>超时命令将记录为采集失败。</small></label>
+            <label>陈旧阈值（秒）<input name="stale_after_seconds" type="number" min="0"><small>0 表示按采集间隔自动计算。</small></label>
+          </div>
+        </section>
+
+        <footer class="config-actions"><div><button type="submit">保存配置并预检 LSF</button><small id="configMessage" aria-live="polite">未保存的修改不会应用到采集器。</small></div><p>FlexNet 配置在下次采集时读取。</p></footer>
+      </form>
+    </section>
   </main>
   <script src="/static/app.js"></script>
 </body>
