@@ -41,6 +41,14 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     licenses = db.latest_rows("licenses", cluster)
     running_jobs = [job for job in jobs if job["status"] == "RUN"]
     waste_jobs = [job for job in running_jobs if job["requested_mem_mb"] and job["used_mem_mb"] / job["requested_mem_mb"] < 0.4]
+    queue_running_slots = sum(queue["running"] for queue in queues)
+    queue_max_slots = sum(queue["max_slots"] for queue in queues)
+    host_running_slots = sum(host["running_slots"] for host in hosts)
+    host_max_slots = sum(host["max_slots"] for host in hosts)
+    # An LSF queue MAX of "-" means unlimited and is stored as zero. In that
+    # case, hosts are the authoritative physical capacity for the dashboard.
+    running_slots = queue_running_slots if queues else host_running_slots
+    max_slots = queue_max_slots or host_max_slots
     return {
         "cluster": cluster,
         "snapshot": db.snapshot_status(cluster),
@@ -49,15 +57,15 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
             "pending_jobs": sum(1 for job in jobs if job["status"] == "PEND"),
             "exit_jobs": sum(1 for job in jobs if job["status"] == "EXIT"),
             "hosts": len(hosts), "unavailable_hosts": sum(1 for host in hosts if host["status"].lower() not in {"ok", "closed_full"}),
-            "running_slots": sum(queue["running"] for queue in queues),
-            "max_slots": sum(queue["max_slots"] for queue in queues),
+            "running_slots": running_slots,
+            "max_slots": max_slots,
             "memory_waste_jobs": len(waste_jobs),
             "license_risks": sum(1 for item in licenses if item["status"] != "ok"),
         },
         "efficiency": {
             "cpu_pct": round(sum(host["cpu_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
             "mem_pct": round(sum(host["mem_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
-            "slot_pct": round(sum(queue["running"] for queue in queues) / max(1, sum(queue["max_slots"] for queue in queues)) * 100, 1),
+            "slot_pct": round(running_slots / max(1, max_slots) * 100, 1),
         },
     }
 

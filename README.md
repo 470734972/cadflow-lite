@@ -2,6 +2,20 @@
 
 面向芯片公司 CAD/LSF 运维的轻量监控门户。它运行在 Rocky Linux 原生 Python + systemd 环境中，不使用 Docker、Podman、Docker Compose 或 Maven/POM。
 
+## 产品效果
+
+### 集群总览
+
+![CADFlow 集群总览](docs/screenshots/overview.png)
+
+### 用户资源使用
+
+![CADFlow 用户资源使用](docs/screenshots/users.png)
+
+### LSF / FlexNet 配置
+
+![CADFlow 采集源配置](docs/screenshots/config.png)
+
 ## 功能
 
 - LSF 作业、队列、主机与 FlexNet License 只读采集
@@ -48,9 +62,9 @@ sudo bash deploy/install-rocky10.sh --no-firewall
 预检前，先使用将来运行服务的账号确认现场命令支持以下字段：
 
 ```bash
-bjobs -u all -a -noheader -o "jobid|user|stat|queue|exec_host|nreq_slot|max_mem|run_time|project_name delimiter='|'"
-bqueues -noheader -o "queue_name|status|max|run|pend|susp delimiter='|'"
-bhosts -noheader -o "host_name|status|max|njobs delimiter='|'"
+bjobs -u all -a -noheader -o "jobid user stat queue exec_host slots max_mem run_time proj_name delimiter='|'"
+bqueues -w
+bhosts -w
 lsload -w
 lmstat -a -c 27000@license01
 ```
