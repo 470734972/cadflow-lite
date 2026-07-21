@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table
+from app.collectors.lsf import LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table, parse_whitespace_table
 
 
 def test_parse_pipe_table():
@@ -14,6 +14,14 @@ def test_parse_pipe_table():
 def test_pipe_table_rejects_unexpected_lsf_format():
     with pytest.raises(ParseError, match="expected 2 columns"):
         parse_pipe_table("840101|alice|RUN\n", ["job_id", "user"])
+
+
+def test_parse_legacy_whitespace_table():
+    rows = parse_whitespace_table(
+        "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",
+        {"HOST_NAME", "STATUS", "MAX", "RUN"},
+    )
+    assert rows == [{"HOST_NAME": "compute01", "STATUS": "ok", "JL/U": "-", "MAX": "64", "NJOBS": "8", "RUN": "8", "SSUSP": "0", "USUSP": "0", "RSV": "0"}]
 
 
 def test_duration_and_lsload_parsing():
@@ -54,8 +62,8 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
             self.commands.append(argv)
             outputs = {
                 "bjobs": "1|alice|RUN|normal|compute01|8|12G|01:00:00|orion\n",
-                "bqueues": "normal|Open:Active|64|8|3|0\n",
-                "bhosts": "compute01|ok|64|8\n",
+                "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - - - - 11 3 8 0 0\n",
+                "bhosts": "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",
                 "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
                 "lmstat": "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)\n",
             }

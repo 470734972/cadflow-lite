@@ -115,6 +115,21 @@ def parse_pipe_table(text: str, columns: list[str]) -> list[dict[str, str]]:
     return rows
 
 
+def parse_whitespace_table(text: str, required: set[str]) -> list[dict[str, str]]:
+    """Parse the standard, whitespace-delimited LSF table formats used by 10.1.0.0."""
+    lines = [line.split() for line in text.splitlines() if line.strip()]
+    header_index = next((index for index, values in enumerate(lines) if required.issubset(set(values))), None)
+    if header_index is None:
+        raise ParseError(f"LSF table is missing required columns: {sorted(required)}")
+    headers = lines[header_index]
+    rows: list[dict[str, str]] = []
+    for values in lines[header_index + 1 :]:
+        if len(values) < len(headers):
+            continue
+        rows.append(dict(zip(headers, values)))
+    return rows
+
+
 def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     """Return LSF load-index values keyed by host from `lsload -w` output."""
     lines = [line.split() for line in text.splitlines() if line.strip()]
@@ -205,23 +220,26 @@ class LsfCollector(Collector):
         } for row in parsed]
 
     def _queues(self) -> list[dict]:
-        output = self.runner.run(["bqueues", "-noheader", "-o", "queue_name status max run pend susp delimiter='|'"])
-        parsed = parse_pipe_table(output, ["name", "status", "max_slots", "running", "pending", "suspended"])
-        return [{**row, **{key: int(_number(row[key])) for key in ("max_slots", "running", "pending", "suspended")}} for row in parsed]
+        # LSF 10.1.0.0 does not support bqueues -o or -noheader. The standard
+        # wide table is stable across the legacy and current command variants.
+        parsed = parse_whitespace_table(self.runner.run(["bqueues", "-w"]), {"QUEUE_NAME", "STATUS", "MAX", "PEND", "RUN", "SUSP"})
+        return [{
+            "name": row["QUEUE_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
+            "running": int(_number(row["RUN"])), "pending": int(_number(row["PEND"])), "suspended": int(_number(row["SUSP"])),
+        } for row in parsed]
 
     def _hosts(self) -> list[dict]:
-        hosts_output = self.runner.run(["bhosts", "-noheader", "-o", "host_name status max njobs delimiter='|'"])
+        # Use the legacy-compatible standard table for the same reason as bqueues.
+        hosts_output = self.runner.run(["bhosts", "-w"])
         load_output = self.runner.run(["lsload", "-w"])
         loads = parse_lsload(load_output)
-        parsed = parse_pipe_table(hosts_output, ["name", "status", "max_slots", "running_slots"])
+        parsed = parse_whitespace_table(hosts_output, {"HOST_NAME", "STATUS", "MAX", "RUN"})
         return [{
-            **row,
-            "max_slots": int(_number(row["max_slots"])),
-            "running_slots": int(_number(row["running_slots"])),
-            "cpu_pct": loads.get(row["name"], {}).get("cpu_pct", 0),
+            "name": row["HOST_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
+            "running_slots": int(_number(row["RUN"])), "cpu_pct": loads.get(row["HOST_NAME"], {}).get("cpu_pct", 0),
             # lsload reports free memory, not total memory. Do not derive a fake percentage.
             "mem_pct": 0,
-            "load_15m": loads.get(row["name"], {}).get("load_15m", 0),
+            "load_15m": loads.get(row["HOST_NAME"], {}).get("load_15m", 0),
         } for row in parsed]
 
     def _licenses(self) -> list[dict]:
