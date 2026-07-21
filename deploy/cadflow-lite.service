@@ -1,5 +1,5 @@
 [Unit]
-Description=CADFlow Lite read-only LSF collector and portal
+Description=CADFlow Lite native LSF portal
 Wants=network-online.target
 After=network-online.target
 
@@ -7,16 +7,19 @@ After=network-online.target
 Type=simple
 User=cadflow
 Group=cadflow
-WorkingDirectory=/opt/cadflow
-EnvironmentFile=/etc/cadflow/cadflow.env
-ExecStart=/opt/cadflow/deploy/cadflow-serve
+WorkingDirectory=/opt/cadflow-lite/current
+EnvironmentFile=/etc/cadflow-lite/cadflow.env
+ExecStart=/opt/cadflow-lite/current/deploy/cadflow-serve
 Restart=on-failure
-RestartSec=10
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=30
+UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/cadflow
+ReadWritePaths=/var/lib/cadflow-lite
 
 [Install]
 WantedBy=multi-user.target
