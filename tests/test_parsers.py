@@ -67,4 +67,4 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["jobs"][0]["requested_mem_mb"] == 0
     assert payload["hosts"][0]["cpu_pct"] == 72
     assert payload["licenses"][0]["vendor"] == "snpslmd"
-    assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue exec_host nreq_slot max_mem run_time project_name delimiter='|'"] in runner.commands
+    assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue exec_host slots max_mem run_time proj_name delimiter='|'"] in runner.commands

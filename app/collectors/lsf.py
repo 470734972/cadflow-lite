@@ -193,7 +193,7 @@ class LsfCollector(Collector):
     def _jobs(self) -> list[dict]:
         output = self.runner.run([
             "bjobs", "-u", "all", "-a", "-noheader", "-o",
-            "jobid user stat queue exec_host nreq_slot max_mem run_time project_name delimiter='|'",
+            "jobid user stat queue exec_host slots max_mem run_time proj_name delimiter='|'",
         ])
         parsed = parse_pipe_table(output, ["job_id", "user", "status", "queue", "exec_host", "slots", "max_mem", "runtime", "project"])
         return [{
