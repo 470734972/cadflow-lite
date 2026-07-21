@@ -193,7 +193,7 @@ class LsfCollector(Collector):
     def _jobs(self) -> list[dict]:
         output = self.runner.run([
             "bjobs", "-u", "all", "-a", "-noheader", "-o",
-            "jobid|user|stat|queue|exec_host|nreq_slot|max_mem|run_time|project_name delimiter='|'",
+            "jobid user stat queue exec_host nreq_slot max_mem run_time project_name delimiter='|'",
         ])
         parsed = parse_pipe_table(output, ["job_id", "user", "status", "queue", "exec_host", "slots", "max_mem", "runtime", "project"])
         return [{
@@ -205,12 +205,12 @@ class LsfCollector(Collector):
         } for row in parsed]
 
     def _queues(self) -> list[dict]:
-        output = self.runner.run(["bqueues", "-noheader", "-o", "queue_name|status|max|run|pend|susp delimiter='|'"])
+        output = self.runner.run(["bqueues", "-noheader", "-o", "queue_name status max run pend susp delimiter='|'"])
         parsed = parse_pipe_table(output, ["name", "status", "max_slots", "running", "pending", "suspended"])
         return [{**row, **{key: int(_number(row[key])) for key in ("max_slots", "running", "pending", "suspended")}} for row in parsed]
 
     def _hosts(self) -> list[dict]:
-        hosts_output = self.runner.run(["bhosts", "-noheader", "-o", "host_name|status|max|njobs delimiter='|'"])
+        hosts_output = self.runner.run(["bhosts", "-noheader", "-o", "host_name status max njobs delimiter='|'"])
         load_output = self.runner.run(["lsload", "-w"])
         loads = parse_lsload(load_output)
         parsed = parse_pipe_table(hosts_output, ["name", "status", "max_slots", "running_slots"])

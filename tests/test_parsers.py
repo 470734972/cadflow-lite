@@ -44,10 +44,14 @@ def test_runner_rejects_non_allowlisted_command():
 
 def test_lsf_collector_uses_real_command_contract_without_inventing_requested_memory():
     class FakeRunner:
+        def __init__(self):
+            self.commands = []
+
         def check_available(self, commands):
             return {command: f"/opt/lsf/bin/{command}" for command in commands}
 
         def run(self, argv):
+            self.commands.append(argv)
             outputs = {
                 "bjobs": "1|alice|RUN|normal|compute01|8|12G|01:00:00|orion\n",
                 "bqueues": "normal|Open:Active|64|8|3|0\n",
@@ -57,8 +61,10 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
             }
             return outputs[argv[0]]
 
-    payload = LsfCollector(20, "/opt/flexnet/lmstat", ("27000@license01",), license_vendor="snpslmd", runner=FakeRunner()).collect()
+    runner = FakeRunner()
+    payload = LsfCollector(20, "/opt/flexnet/lmstat", ("27000@license01",), license_vendor="snpslmd", runner=runner).collect()
     assert payload["jobs"][0]["runtime_seconds"] == 3600
     assert payload["jobs"][0]["requested_mem_mb"] == 0
     assert payload["hosts"][0]["cpu_pct"] == 72
     assert payload["licenses"][0]["vendor"] == "snpslmd"
+    assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue exec_host nreq_slot max_mem run_time project_name delimiter='|'"] in runner.commands
