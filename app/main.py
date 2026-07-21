@@ -168,6 +168,37 @@ def jobs(status: str | None = None, user: str | None = None, queue: str | None =
     return rows[:limit]
 
 
+@app.get("/api/users")
+def users() -> list[dict[str, int | str]]:
+    """Return one current-snapshot utilization row per LSF user."""
+    grouped: dict[str, dict[str, int | str]] = {}
+    for job in db.latest_rows("jobs", runtime.config.cluster_name):
+        username = job["user"] or "unknown"
+        row = grouped.setdefault(username, {
+            "user": username, "total_jobs": 0, "running_jobs": 0, "pending_jobs": 0,
+            "exit_jobs": 0, "running_slots": 0, "total_slots": 0, "cpu_efficiency_sum": 0,
+        })
+        status = job["status"].upper()
+        slots = int(job["slots"] or 0)
+        row["total_jobs"] += 1
+        row["total_slots"] += slots
+        if status == "RUN":
+            row["running_jobs"] += 1
+            row["running_slots"] += slots
+        elif status == "PEND":
+            row["pending_jobs"] += 1
+        elif status == "EXIT":
+            row["exit_jobs"] += 1
+        row["cpu_efficiency_sum"] += round(float(job["cpu_efficiency"] or 0) * 100)
+
+    result = []
+    for row in grouped.values():
+        total_jobs = int(row["total_jobs"])
+        row["cpu_efficiency_pct"] = round(int(row.pop("cpu_efficiency_sum")) / total_jobs) if total_jobs else 0
+        result.append(row)
+    return sorted(result, key=lambda row: (-int(row["running_slots"]), -int(row["total_jobs"]), str(row["user"])))
+
+
 @app.get("/api/queues")
 def queues() -> list[dict]:
     return db.latest_rows("queues", runtime.config.cluster_name)
