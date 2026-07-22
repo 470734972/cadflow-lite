@@ -36,7 +36,7 @@
     <section id="users" class="view"><article class="panel"><div class="panel-title"><div><h2>用户资源使用</h2><span>按当前采集快照聚合 LSF 作业</span></div><span id="userCount">0 位用户</span></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>运行作业</th><th>等待作业</th><th>异常退出</th><th>运行 Slots</th><th>全部 Slots</th><th>CPU 效率</th></tr></thead><tbody id="userRows"></tbody></table></div></article></section>
     <section id="queues" class="view"><div id="queueCards" class="card-grid"></div></section>
     <section id="hosts" class="view"><div id="hostCards" class="card-grid"></div></section>
-    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License 容量</h2><span>FlexNet · 计量 / 节点锁定</span></div><div id="licenseRows" class="license-list"></div></article></section>
+    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License 容量</h2><div class="license-filters"><input id="licenseSearch" type="search" placeholder="功能名、Vendor 或服务器" autocomplete="off"><select id="licenseStatus"><option value="">全部 License</option><option value="floating">浮动许可</option><option value="node_locked">节点锁定</option><option value="risk">风险许可</option></select></div></div><div id="licenseRows" class="license-list"></div></article></section>
 
     <section id="config" class="view">
       <div class="config-intro">
