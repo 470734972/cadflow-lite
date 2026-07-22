@@ -131,13 +131,13 @@ def parse_whitespace_table(text: str, required: set[str]) -> list[dict[str, str]
 
 
 def parse_lsload(text: str) -> dict[str, dict[str, float]]:
-    """Return LSF load-index values keyed by host from `lsload -w` output."""
+    """Return actual LSF load-index values keyed by host from `lsload -w` output."""
     lines = [line.split() for line in text.splitlines() if line.strip()]
     header_index = next((index for index, values in enumerate(lines) if "HOST_NAME" in values), None)
     if header_index is None:
         raise ParseError("lsload output does not contain HOST_NAME header")
     headers = [value.lower() for value in lines[header_index]]
-    required = {"host_name", "r15m", "ut"}
+    required = {"host_name", "r1m", "r15m", "ut", "mem", "tmp", "swp"}
     if not required.issubset(headers):
         raise ParseError(f"lsload header is missing required columns: {sorted(required - set(headers))}")
     result: dict[str, dict[str, float]] = {}
@@ -148,7 +148,15 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
         host = row["host_name"]
         if host.lower() in {"host_name", "-"}:
             continue
-        result[host] = {"cpu_pct": _number(row["ut"]), "load_15m": _number(row["r15m"])}
+        result[host] = {
+            "cpu_pct": _number(row["ut"]),
+            "load_1m": _number(row["r1m"]),
+            "load_15m": _number(row["r15m"]),
+            # LSF reports these as available capacity, in MB after _number conversion.
+            "free_mem_mb": _number(row["mem"]),
+            "free_tmp_mb": _number(row["tmp"]),
+            "free_swap_mb": _number(row["swp"]),
+        }
     return result
 
 
@@ -251,9 +259,13 @@ class LsfCollector(Collector):
         return [{
             "name": row["HOST_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
             "running_slots": int(_number(row["RUN"])), "cpu_pct": loads.get(row["HOST_NAME"], {}).get("cpu_pct", 0),
-            # lsload reports free memory, not total memory. Do not derive a fake percentage.
-            "mem_pct": 0,
+            # lsload reports free memory, not total memory; keep utilization unavailable rather than inventing it.
+            "mem_pct": -1,
+            "load_1m": loads.get(row["HOST_NAME"], {}).get("load_1m", 0),
             "load_15m": loads.get(row["HOST_NAME"], {}).get("load_15m", 0),
+            "free_mem_mb": loads.get(row["HOST_NAME"], {}).get("free_mem_mb", 0),
+            "free_tmp_mb": loads.get(row["HOST_NAME"], {}).get("free_tmp_mb", 0),
+            "free_swap_mb": loads.get(row["HOST_NAME"], {}).get("free_swap_mb", 0),
         } for row in parsed]
 
     def _licenses(self) -> list[dict]:

@@ -33,7 +33,7 @@ def test_duration_and_lsload_parsing():
         "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\n"
         "compute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n"
     )
-    assert loads == {"compute01": {"cpu_pct": 72, "load_15m": 0.3}}
+    assert loads == {"compute01": {"cpu_pct": 72, "load_1m": 0.2, "load_15m": 0.3, "free_mem_mb": 131072, "free_tmp_mb": 0, "free_swap_mb": 65536}}
 
 
 def test_parse_lmstat():
@@ -91,5 +91,6 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["jobs"][0]["submit_host"] == "login01"
     assert payload["jobs"][0]["job_name"] == "vcs_compile_top"
     assert payload["hosts"][0]["cpu_pct"] == 72
+    assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands

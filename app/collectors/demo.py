@@ -29,7 +29,11 @@ class DemoCollector(Collector):
                 "running_slots": 0 if status != "ok" else running,
                 "cpu_pct": 0 if status != "ok" else round(min(99, running / max_slots * 100 + rng.uniform(-5, 8)), 1),
                 "mem_pct": 0 if status != "ok" else round(rng.uniform(48, 91), 1),
+                "load_1m": 0 if status != "ok" else round(rng.uniform(12, 62), 2),
                 "load_15m": 0 if status != "ok" else round(rng.uniform(18, 68), 2),
+                "free_mem_mb": 0 if status != "ok" else round(rng.uniform(8192, 131072)),
+                "free_tmp_mb": 0 if status != "ok" else round(rng.uniform(10240, 204800)),
+                "free_swap_mb": 0 if status != "ok" else round(rng.uniform(4096, 65536)),
             })
         queues = [
             {"name": "normal", "status": "Open:Active", "max_slots": 256, "running": 218, "pending": 31, "suspended": 2},

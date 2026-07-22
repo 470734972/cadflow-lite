@@ -64,7 +64,11 @@ CREATE TABLE IF NOT EXISTS hosts (
     running_slots INTEGER NOT NULL DEFAULT 0,
     cpu_pct REAL NOT NULL DEFAULT 0,
     mem_pct REAL NOT NULL DEFAULT 0,
+    load_1m REAL NOT NULL DEFAULT 0,
     load_15m REAL NOT NULL DEFAULT 0,
+    free_mem_mb REAL NOT NULL DEFAULT 0,
+    free_tmp_mb REAL NOT NULL DEFAULT 0,
+    free_swap_mb REAL NOT NULL DEFAULT 0,
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
@@ -104,6 +108,7 @@ class Database:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
             self._migrate_jobs(conn)
+            self._migrate_hosts(conn)
 
     @staticmethod
     def _migrate_jobs(conn: sqlite3.Connection) -> None:
@@ -117,6 +122,20 @@ class Database:
         for name, definition in migrations.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _migrate_hosts(conn: sqlite3.Connection) -> None:
+        """Add LSF load-index fields while retaining historical snapshots."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(hosts)")}
+        migrations = {
+            "load_1m": "REAL NOT NULL DEFAULT 0",
+            "free_mem_mb": "REAL NOT NULL DEFAULT 0",
+            "free_tmp_mb": "REAL NOT NULL DEFAULT 0",
+            "free_swap_mb": "REAL NOT NULL DEFAULT 0",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE hosts ADD COLUMN {name} {definition}")
 
     def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0) -> int:
         with self._lock, self.connect() as conn:

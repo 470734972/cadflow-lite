@@ -64,7 +64,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
         },
         "efficiency": {
             "cpu_pct": round(sum(host["cpu_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
-            "mem_pct": round(sum(host["mem_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
+            "mem_pct": round(sum(host["mem_pct"] for host in hosts if host["mem_pct"] >= 0) / len([host for host in hosts if host["mem_pct"] >= 0]), 1) if any(host["mem_pct"] >= 0 for host in hosts) else None,
             "slot_pct": round(running_slots / max(1, max_slots) * 100, 1),
         },
     }
