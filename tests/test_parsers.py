@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -94,3 +94,25 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
+
+
+def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():
+    class BrokenLicenseRunner:
+        def check_available(self, commands):
+            if commands == ["lmstat"]:
+                raise CommandError("required command is not executable: /eda/license/flexlm/lmstat")
+            return {command: f"/opt/lsf/bin/{command}" for command in commands}
+
+        def run(self, argv):
+            outputs = {
+                "bjobs": "",
+                "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - - - - 0 0 0 0 0\n",
+                "bhosts": "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 0 0 0 0 0\n",
+                "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01 ok 0.1 0.2 0.3 2% 0 0 0 0 4G 8G\n",
+            }
+            return outputs[argv[0]]
+
+    payload = LsfCollector(20, "/missing/lmstat", ("27000@license01",), runner=BrokenLicenseRunner()).collect()
+    assert payload["hosts"][0]["name"] == "compute01"
+    assert payload["licenses"] == []
+    assert payload["_warnings"] == ["FlexNet License: required command is not executable: /eda/license/flexlm/lmstat"]

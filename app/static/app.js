@@ -9,7 +9,8 @@ async function load(){
   ]);
   const failed=health.failure;
   $('#healthDot').style.background=health.status==='ok'?'var(--green)':'var(--red)';
-  $('#healthText').textContent=health.status==='ok'?'采集正常':failed?`采集异常 · ${failed.component}`:'采集异常';
+  const partial=health.snapshot?.status==='partial';
+  $('#healthText').textContent=health.status==='ok'?'采集正常':failed?`${partial?'部分采集异常':'采集异常'} · ${failed.component}`:'采集异常';
   $('#modeText').textContent=`${health.cluster} · ${health.mode}`;
   $('#healthDetail').textContent=health.status==='ok'?'最近一次采集成功':failed?failed.message:'采集数据已过期，请刷新确认';
   $('#healthDetail').title=$('#healthDetail').textContent;

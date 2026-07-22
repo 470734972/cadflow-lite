@@ -217,14 +217,19 @@ class LsfCollector(Collector):
         self.license_vendor = license_vendor
 
     def preflight(self) -> dict[str, str]:
-        commands = ["bjobs", "bqueues", "bhosts", "lsload"]
-        if self.license_servers:
-            commands.append("lmstat")
-        return self.runner.check_available(commands)
+        return self.runner.check_available(["bjobs", "bqueues", "bhosts", "lsload"])
 
-    def collect(self) -> dict[str, list[dict]]:
+    def collect(self) -> dict[str, object]:
         self.preflight()
-        return {"jobs": self._jobs(), "queues": self._queues(), "hosts": self._hosts(), "licenses": self._licenses()}
+        payload: dict[str, object] = {"jobs": self._jobs(), "queues": self._queues(), "hosts": self._hosts(), "licenses": []}
+        if self.license_servers:
+            try:
+                self.runner.check_available(["lmstat"])
+                payload["licenses"] = self._licenses()
+            except CommandError as exc:
+                # License availability must not hide otherwise healthy LSF capacity data.
+                payload["_warnings"] = [f"FlexNet License: {exc}"]
+        return payload
 
     def _jobs(self) -> list[dict]:
         output = self.runner.run([

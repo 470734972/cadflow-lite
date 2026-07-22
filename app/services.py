@@ -24,8 +24,9 @@ class CollectionService:
         try:
             payload = self.collector.collect()
             duration_ms = int((time.monotonic() - started) * 1000)
-            snapshot_id = self.db.save_snapshot(self.cluster, collected_at, payload, duration_ms)
-            return {"ok": True, "snapshot_id": snapshot_id, "duration_ms": duration_ms}
+            warnings = list(payload.pop("_warnings", []))
+            snapshot_id = self.db.save_snapshot(self.cluster, collected_at, payload, duration_ms, warnings)
+            return {"ok": True, "snapshot_id": snapshot_id, "duration_ms": duration_ms, "warnings": warnings}
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
             self.db.save_failure(self.cluster, collected_at, str(exc), duration_ms)

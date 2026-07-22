@@ -137,11 +137,12 @@ class Database:
             if name not in columns:
                 conn.execute(f"ALTER TABLE hosts ADD COLUMN {name} {definition}")
 
-    def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0) -> int:
+    def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0, warnings: list[str] | None = None) -> int:
         with self._lock, self.connect() as conn:
+            warnings = warnings or []
             cursor = conn.execute(
-                "INSERT INTO snapshots(cluster, collected_at, status, duration_ms) VALUES (?, ?, 'ok', ?)",
-                (cluster, collected_at, duration_ms),
+                "INSERT INTO snapshots(cluster, collected_at, status, duration_ms, error) VALUES (?, ?, ?, ?, ?)",
+                (cluster, collected_at, "partial" if warnings else "ok", duration_ms, "; ".join(warnings)[:1000]),
             )
             snapshot_id = int(cursor.lastrowid)
             self._insert_many(conn, "jobs", snapshot_id, payload.get("jobs", []))
@@ -186,7 +187,7 @@ class Database:
     def latest_snapshot_id(self, cluster: str) -> int | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT id FROM snapshots WHERE cluster=? AND status='ok' ORDER BY id DESC LIMIT 1", (cluster,)
+                "SELECT id FROM snapshots WHERE cluster=? AND status IN ('ok', 'partial') ORDER BY id DESC LIMIT 1", (cluster,)
             ).fetchone()
             return int(row["id"]) if row else None
 
@@ -219,7 +220,7 @@ class Database:
                        COALESCE((SELECT AVG(cpu_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS cpu_pct,
                        COALESCE((SELECT AVG(mem_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS mem_pct
                 FROM snapshots s
-                WHERE s.cluster=? AND s.status='ok'
+                WHERE s.cluster=? AND s.status IN ('ok', 'partial')
                 ORDER BY s.id DESC LIMIT ?
                 """,
                 (cluster, limit),

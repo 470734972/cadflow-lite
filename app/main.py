@@ -91,16 +91,18 @@ async def collection_loop() -> None:
 def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
     if not status:
         return {"freshness": "never", "age_seconds": -1}
-    if status["status"] != "ok":
+    if status["status"] == "error":
         return {"freshness": "failed", "age_seconds": -1}
     collected_at = datetime.fromisoformat(status["collected_at"].replace("Z", "+00:00"))
     age_seconds = max(0, int((datetime.now(timezone.utc) - collected_at).total_seconds()))
+    if status["status"] == "partial":
+        return {"freshness": "partial", "age_seconds": age_seconds}
     return {"freshness": "stale" if age_seconds > runtime.config.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
 
 
 def collection_failure_detail(status: dict | None) -> dict[str, str] | None:
     """Convert a raw collector failure into a concise UI-safe diagnosis."""
-    if not status or status["status"] != "error":
+    if not status or status["status"] not in {"error", "partial"}:
         return None
     error = str(status.get("error", "")).strip()
     lowered = error.lower()
