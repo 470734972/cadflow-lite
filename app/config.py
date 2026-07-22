@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -78,11 +79,15 @@ class RuntimeConfig:
         allowed = {key: str(value) for key, value in env.items() if key.startswith("LSF_") or key in {"PATH", "LD_LIBRARY_PATH"}}
         if len(allowed) != len(env):
             raise ValueError("lsf_env only permits LSF_*, PATH and LD_LIBRARY_PATH")
+        vendor_text = str(data.get("license_vendor", "")).strip()
+        vendors = [item.strip() for item in vendor_text.split(",") if item.strip()]
+        if any(not re.fullmatch(r"[A-Za-z0-9_.-]+", item) for item in vendors):
+            raise ValueError("license_vendor must contain English daemon names separated by commas")
         config = cls(
             str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "eda-lab")).strip(),
             int(data.get("collect_interval_seconds", 300)), int(data.get("command_timeout_seconds", 45)),
             int(data.get("stale_after_seconds", 0)), str(data.get("lsf_bin_dir", "")).strip(),
-            str(data.get("lmstat_path", "")).strip(), tuple(servers), str(data.get("license_vendor", "")).strip(), allowed,
+            str(data.get("lmstat_path", "")).strip(), tuple(servers), ",".join(vendors), allowed,
         )
         config.validate()
         return config

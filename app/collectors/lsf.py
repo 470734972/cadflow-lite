@@ -154,11 +154,11 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
 
 def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, str | int]]:
     features: list[dict[str, str | int]] = []
-    pattern = re.compile(
+    counted_pattern = re.compile(
         r"Users of (?P<feature>[^:]+):.*?Total of (?P<total>\d+) licenses issued;.*?Total of (?P<used>\d+) licenses in use",
         re.I | re.S,
     )
-    for match in pattern.finditer(text):
+    for match in counted_pattern.finditer(text):
         total, used = int(match.group("total")), int(match.group("used"))
         utilization = used / total if total else 0
         features.append({
@@ -169,6 +169,19 @@ def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, str
             "used": used,
             "expires_at": "",
             "status": "critical" if utilization >= 0.95 else "warning" if utilization >= 0.85 else "ok",
+        })
+    # Node-locked licenses intentionally have no floating pool total. They are
+    # still useful inventory data and must not be mistaken for an empty result.
+    node_locked_pattern = re.compile(r"Users of (?P<feature>[^:]+):\s*\(Uncounted,\s*node-locked\)", re.I)
+    for match in node_locked_pattern.finditer(text):
+        features.append({
+            "server": server,
+            "vendor": vendor,
+            "feature": match.group("feature").strip(),
+            "total": 0,
+            "used": 0,
+            "expires_at": "",
+            "status": "node_locked",
         })
     return features
 

@@ -42,6 +42,11 @@ def test_parse_lmstat():
     assert rows == [{"server": "27000@license01", "vendor": "", "feature": "VCS", "total": 120, "used": 108, "expires_at": "", "status": "warning"}]
 
 
+def test_parse_lmstat_includes_node_locked_inventory():
+    rows = parse_lmstat("Users of amps:  (Uncounted, node-locked)", "27000@license01", "snpslmd,cdslmd")
+    assert rows == [{"server": "27000@license01", "vendor": "snpslmd,cdslmd", "feature": "amps", "total": 0, "used": 0, "expires_at": "", "status": "node_locked"}]
+
+
 def test_collection_failure_detail_identifies_failed_data_source():
     assert collection_failure_detail({"status": "error", "error": "required command is not executable: /eda/license/flexlm/lmstat"}) == {
         "component": "FlexNet License", "message": "required command is not executable: /eda/license/flexlm/lmstat",

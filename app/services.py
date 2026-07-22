@@ -60,7 +60,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
             "running_slots": running_slots,
             "max_slots": max_slots,
             "memory_waste_jobs": len(waste_jobs),
-            "license_risks": sum(1 for item in licenses if item["status"] != "ok"),
+            "license_risks": sum(1 for item in licenses if item["status"] in {"warning", "critical"}),
         },
         "efficiency": {
             "cpu_pct": round(sum(host["cpu_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
