@@ -7,8 +7,12 @@ async function load(){
   const [health,summary,alerts,history,jobs,users,queues,hosts,licenses]=await Promise.all([
     api('/api/health'),api('/api/summary'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
   ]);
+  const failed=health.failure;
   $('#healthDot').style.background=health.status==='ok'?'var(--green)':'var(--red)';
-  $('#healthText').textContent=health.status==='ok'?'采集正常':'采集异常'; $('#modeText').textContent=`${health.cluster} · ${health.mode}`;
+  $('#healthText').textContent=health.status==='ok'?'采集正常':failed?`采集异常 · ${failed.component}`:'采集异常';
+  $('#modeText').textContent=`${health.cluster} · ${health.mode}`;
+  $('#healthDetail').textContent=health.status==='ok'?'最近一次采集成功':failed?failed.message:'采集数据已过期，请刷新确认';
+  $('#healthDetail').title=$('#healthDetail').textContent;
   renderSummary(summary); renderAlerts(alerts); drawHistory(history); renderJobs(jobs); renderUsers(users); renderQueues(queues); renderHosts(hosts); renderLicenses(licenses);
 }
 function renderSummary(s){const t=s.totals;const data=[['运行作业',t.running_jobs,'RUN'],['等待作业',t.pending_jobs,'PEND'],['异常退出',t.exit_jobs,'EXIT'],['运行Slots',`${t.running_slots}/${t.max_slots}`,'SLOT'],['低内存效率',t.memory_waste_jobs,'WASTE'],['License风险',t.license_risks,'RISK']];$('#kpis').innerHTML=data.map(x=>`<div class="kpi"><small>${x[0]}</small><strong>${x[1]}</strong><em>${x[2]}</em></div>`).join('');const colors=['var(--cyan)','var(--blue)','var(--yellow)'];$('#gauges').innerHTML=[['CPU',s.efficiency.cpu_pct],['内存',s.efficiency.mem_pct],['Slot',s.efficiency.slot_pct]].map((x,i)=>`<div class="gauge"><div class="ring" style="--value:${x[1]};--color:${colors[i]}"><strong>${x[1]}%</strong></div><p>${x[0]}利用率</p></div>`).join('')}
@@ -24,5 +28,5 @@ function envToText(env){return Object.entries(env||{}).map(([k,v])=>`${k}=${v}`)
 function envToObject(text){return Object.fromEntries(text.split('\n').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),x.slice(i+1).trim()]}).filter(([k])=>k))}
 async function loadConfig(){const c=await api('/api/config'),f=$('#configForm');Object.entries(c).forEach(([k,v])=>{const e=f.elements[k];if(e)e.value=k==='license_servers'?v.join(','):k==='lsf_env'?envToText(v):v})}
 $$('.nav').forEach(btn=>btn.onclick=()=>{$$('.nav,.view').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$(`#${btn.dataset.view}`).classList.add('active');$('#pageTitle').textContent=btn.textContent==='总览'?'集群运行总览':btn.textContent;if(btn.dataset.view==='config')loadConfig().catch(showError)});
-$('#refreshBtn').onclick=()=>load().catch(showError);$('#jobStatus').onchange=()=>renderJobs();$('#jobUser').oninput=()=>renderJobs();function showError(e){$('#healthText').textContent='连接失败';console.error(e)}load().catch(showError);setInterval(()=>load().catch(showError),60000);addEventListener('resize',()=>api('/api/history').then(drawHistory));
+$('#refreshBtn').onclick=()=>load().catch(showError);$('#jobStatus').onchange=()=>renderJobs();$('#jobUser').oninput=()=>renderJobs();function showError(e){$('#healthText').textContent='连接失败';$('#healthDetail').textContent='无法连接 CADFlow API';console.error(e)}load().catch(showError);setInterval(()=>load().catch(showError),60000);addEventListener('resize',()=>api('/api/history').then(drawHistory));
 $('#configForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));d.collect_interval_seconds=Number(d.collect_interval_seconds);d.command_timeout_seconds=Number(d.command_timeout_seconds);d.stale_after_seconds=Number(d.stale_after_seconds);d.lsf_env=envToObject(d.lsf_env);const m=$('#configMessage');m.textContent='正在预检…';const r=await fetch('/api/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}),body=await r.json();m.textContent=r.ok?'保存成功，LSF 采集已启用。':`失败：${body.detail||'配置无效'}`;if(r.ok)load().catch(showError)};

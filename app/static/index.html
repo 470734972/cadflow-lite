@@ -18,7 +18,7 @@
       <button class="nav" data-view="licenses">License</button>
       <button class="nav" data-view="config">配置</button>
     </nav>
-    <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small></div></div>
+    <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small><small id="healthDetail">正在读取最近一次采集结果</small></div></div>
   </aside>
   <main>
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><button id="refreshBtn">刷新数据</button></header>
@@ -63,7 +63,7 @@
             <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License</h3><p>EDA License 特征和容量数据来源。</p></div></div>
             <label>lmstat 完整路径<input name="lmstat_path" placeholder="/opt/flexnet/bin/lmstat"><small>指定可执行 lmstat 的绝对路径。</small></label>
             <label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"><small>多个服务器以英文逗号分隔。</small></label>
-            <label>License Vendor<input name="license_vendor" placeholder="snpslmd"><small>例如 snpslmd、cdslmd 或 mgcld。</small></label>
+            <label>License Vendor（英文 daemon 名称）<input name="license_vendor" placeholder="snpslmd" pattern="[A-Za-z0-9_.-]+"><small>填写 lmstat 输出中的英文 daemon 名称，例如 snpslmd；仅填一个名称，不使用顿号、逗号或空格。</small></label>
           </section>
         </div>
 

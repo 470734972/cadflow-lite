@@ -98,6 +98,24 @@ def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
     return {"freshness": "stale" if age_seconds > runtime.config.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
 
 
+def collection_failure_detail(status: dict | None) -> dict[str, str] | None:
+    """Convert a raw collector failure into a concise UI-safe diagnosis."""
+    if not status or status["status"] != "error":
+        return None
+    error = str(status.get("error", "")).strip()
+    lowered = error.lower()
+    component = "LSF / FlexNet 采集"
+    if "lmstat" in lowered:
+        component = "FlexNet License"
+    elif "bjobs" in lowered:
+        component = "LSF 作业"
+    elif "bqueues" in lowered:
+        component = "LSF 队列"
+    elif "bhosts" in lowered or "lsload" in lowered:
+        component = "LSF 节点"
+    return {"component": component, "message": error[:240] or "采集器未返回错误详情"}
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.initialize()
@@ -147,6 +165,7 @@ def health() -> dict[str, Any]:
         "mode": runtime.config.mode,
         "cluster": runtime.config.cluster_name,
         "snapshot": status,
+        "failure": collection_failure_detail(status),
         **freshness,
     }
 

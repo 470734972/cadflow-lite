@@ -1,6 +1,7 @@
 import pytest
 
 from app.collectors.lsf import LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table, parse_whitespace_table
+from app.main import collection_failure_detail
 
 
 def test_parse_pipe_table():
@@ -39,6 +40,15 @@ def test_parse_lmstat():
     text = "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)"
     rows = parse_lmstat(text, "27000@license01")
     assert rows == [{"server": "27000@license01", "vendor": "", "feature": "VCS", "total": 120, "used": 108, "expires_at": "", "status": "warning"}]
+
+
+def test_collection_failure_detail_identifies_failed_data_source():
+    assert collection_failure_detail({"status": "error", "error": "required command is not executable: /eda/license/flexlm/lmstat"}) == {
+        "component": "FlexNet License", "message": "required command is not executable: /eda/license/flexlm/lmstat",
+    }
+    assert collection_failure_detail({"status": "error", "error": "bhosts timed out"}) == {
+        "component": "LSF 节点", "message": "bhosts timed out",
+    }
 
 
 def test_runner_rejects_non_allowlisted_command():
