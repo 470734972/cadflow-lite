@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 import time
+from datetime import datetime, timedelta, timezone
 
 from .base import Collector
 
@@ -40,6 +41,7 @@ class DemoCollector(Collector):
         statuses = ["RUN", "RUN", "RUN", "PEND", "EXIT", "DONE"]
         users = ["alice", "bob", "chen", "david", "emma", "frank"]
         projects = ["orion", "nebula", "phoenix"]
+        job_names = ["vcs_compile_top", "innovus_route", "dc_synthesis", "calibre_drc", "simulation_regression"]
         jobs = []
         for index in range(36):
             status = rng.choice(statuses)
@@ -48,7 +50,10 @@ class DemoCollector(Collector):
             jobs.append({
                 "job_id": str(840100 + index), "user": rng.choice(users), "status": status,
                 "queue": rng.choice([q["name"] for q in queues]),
+                "submit_host": rng.choice(["login01", "login02", "cad01"]),
                 "exec_host": "-" if status == "PEND" else rng.choice(hosts)["name"],
+                "job_name": rng.choice(job_names) + f"_{index:02d}",
+                "submit_time": (datetime.now(timezone.utc) - timedelta(minutes=rng.randint(1, 2880))).isoformat(),
                 "slots": rng.choice([1, 4, 8, 16]), "requested_mem_mb": requested,
                 "used_mem_mb": used, "cpu_efficiency": round(rng.uniform(0.12, 0.98), 3),
                 "runtime_seconds": rng.randint(180, 172800),
@@ -62,4 +67,3 @@ class DemoCollector(Collector):
             {"server": "27001@license02", "vendor": "cdslmd", "feature": "Innovus", "total": 96, "used": 67, "expires_at": "2026-12-31", "status": "ok"},
         ]
         return {"jobs": jobs, "queues": queues, "hosts": hosts, "licenses": licenses}
-

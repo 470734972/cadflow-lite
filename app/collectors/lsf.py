@@ -208,12 +208,13 @@ class LsfCollector(Collector):
     def _jobs(self) -> list[dict]:
         output = self.runner.run([
             "bjobs", "-u", "all", "-a", "-noheader", "-o",
-            "jobid user stat queue exec_host slots max_mem run_time proj_name delimiter='|'",
+            "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'",
         ])
-        parsed = parse_pipe_table(output, ["job_id", "user", "status", "queue", "exec_host", "slots", "max_mem", "runtime", "project"])
+        parsed = parse_pipe_table(output, ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"])
         return [{
             "job_id": row["job_id"], "user": row["user"], "status": row["status"], "queue": row["queue"],
-            "exec_host": row["exec_host"] or "-", "slots": max(1, int(_number(row["slots"], 1))),
+            "submit_host": row["submit_host"] or "-", "exec_host": row["exec_host"] or "-",
+            "job_name": row["job_name"], "submit_time": row["submit_time"], "slots": max(1, int(_number(row["slots"], 1))),
             # LSF max_mem is measured usage, not an rusage[mem] request. Keep request unknown rather than invent it.
             "requested_mem_mb": 0, "used_mem_mb": _number(row["max_mem"]), "cpu_efficiency": 0,
             "runtime_seconds": parse_duration_seconds(row["runtime"]), "pending_reason": "", "project": row["project"],

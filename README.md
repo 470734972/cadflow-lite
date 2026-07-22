@@ -62,7 +62,7 @@ sudo bash deploy/install-rocky10.sh --no-firewall
 预检前，先使用将来运行服务的账号确认现场命令支持以下字段：
 
 ```bash
-bjobs -u all -a -noheader -o "jobid user stat queue exec_host slots max_mem run_time proj_name delimiter='|'"
+bjobs -u all -a -noheader -o "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"
 bqueues -w
 bhosts -w
 lsload -w

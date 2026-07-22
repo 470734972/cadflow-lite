@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS jobs (
     status TEXT NOT NULL,
     queue TEXT NOT NULL,
     exec_host TEXT NOT NULL,
+    submit_host TEXT NOT NULL DEFAULT '',
+    job_name TEXT NOT NULL DEFAULT '',
+    submit_time TEXT NOT NULL DEFAULT '',
     slots INTEGER NOT NULL DEFAULT 1,
     requested_mem_mb REAL NOT NULL DEFAULT 0,
     used_mem_mb REAL NOT NULL DEFAULT 0,
@@ -100,6 +103,20 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            self._migrate_jobs(conn)
+
+    @staticmethod
+    def _migrate_jobs(conn: sqlite3.Connection) -> None:
+        """Add new job display fields without invalidating existing snapshots."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+        migrations = {
+            "submit_host": "TEXT NOT NULL DEFAULT ''",
+            "job_name": "TEXT NOT NULL DEFAULT ''",
+            "submit_time": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {definition}")
 
     def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0) -> int:
         with self._lock, self.connect() as conn:
