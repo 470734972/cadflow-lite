@@ -61,3 +61,10 @@ def test_collect_requires_token():
     with TestClient(app) as client:
         assert client.post("/api/collect").status_code == 403
         assert client.post("/api/collect", headers={"X-Admin-Token": "test-token"}).status_code == 200
+
+
+def test_web_refresh_runs_collection_without_exposing_admin_token():
+    with TestClient(app) as client:
+        response = client.post("/api/refresh")
+        assert response.status_code == 200
+        assert response.json()["ok"] is True

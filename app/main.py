@@ -255,6 +255,17 @@ def collect(x_admin_token: str = Header(default="")) -> dict[str, Any]:
     return result
 
 
+@app.post("/api/refresh")
+def refresh_from_web() -> dict[str, Any]:
+    """Run the same fixed read-only collection used by the dashboard refresh button."""
+    result = runtime.collect()
+    if result.get("busy"):
+        raise HTTPException(status_code=409, detail=result["error"])
+    if not result["ok"]:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return result
+
+
 @app.get("/metrics", response_class=PlainTextResponse)
 def metrics() -> str:
     summary_data = build_summary(db, runtime.config.cluster_name)
