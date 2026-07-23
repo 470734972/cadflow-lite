@@ -8,7 +8,7 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 
 | 模块 | 解决的问题 |
 | --- | --- |
-| 总览 | 快速查看运行/等待/异常作业、Slots、资源利用率与告警 |
+| 总览 | 快速查看核心采集链路 SLA、运行/等待/异常作业、Slots、资源利用率与告警 |
 | 作业 | 按用户、状态筛选作业；查看提交时间、缩略作业名、提交/执行节点、资源申请与运行时长 |
 | 用户 | 汇总各用户的作业数、运行 Slots 与资源占用，并可搜索过滤 |
 | 队列 | 查看 LSF 队列的状态、优先级、并发与等待情况 |
@@ -73,6 +73,7 @@ FlexNet 命令 (lmstat -a) ─────────────────�
 - 采集命令固定为只读白名单：`bjobs`、`bqueues`、`bhosts`、`lsload`、`lmstat`。
 - LSF 和 FlexNet 失败彼此隔离：License 暂不可用时，LSF 的作业、队列和节点数据仍可继续采集。
 - 采集结果保存在 SQLite（WAL 模式）；`/metrics` 可供 Prometheus 抓取。
+- 首页 SLA 使用近 24 小时采集快照计算 LSF 作业、队列、节点、FlexNet License 与整体采集链路的可用性，同时公开样本覆盖率；它不替代独立的网络/端口存活探针。
 
 ## Rocky Linux 一键安装
 
@@ -153,6 +154,7 @@ sudo bash /opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
 | --- | --- |
 | `GET /api/health` | 采集健康、部分失败信息、陈旧状态和快照年龄 |
 | `GET /api/summary` | 集群总览 |
+| `GET /api/sla` | 近 24 小时核心采集功能的可用性、覆盖率与状态时间线 |
 | `GET /api/jobs` | 作业列表，支持状态/用户/队列过滤 |
 | `GET /api/queues`、`/api/hosts`、`/api/licenses` | 队列、节点、License 数据 |
 | `GET /api/config`、`PUT /api/config` | Web 配置 |

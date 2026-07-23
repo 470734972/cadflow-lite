@@ -4,8 +4,8 @@ const pct=(a,b)=>b?Math.round(a/b*100):0;
 let allJobs=[],allLicenses=[];
 
 async function load(){
-  const [health,summary,alerts,history,jobs,users,queues,hosts,licenses]=await Promise.all([
-    api('/api/health'),api('/api/summary'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
+  const [health,summary,sla,alerts,history,jobs,users,queues,hosts,licenses]=await Promise.all([
+    api('/api/health'),api('/api/summary'),api('/api/sla'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
   ]);
   const failed=health.failure;
   $('#healthDot').style.background=health.status==='ok'?'var(--green)':'var(--red)';
@@ -14,9 +14,13 @@ async function load(){
   $('#modeText').textContent=`${health.cluster} · ${health.mode}`;
   $('#healthDetail').textContent=health.status==='ok'?'最近一次采集成功':failed?failed.message:'采集数据已过期，请刷新确认';
   $('#healthDetail').title=$('#healthDetail').textContent;
-  renderSummary(summary); renderAlerts(alerts); drawHistory(history); renderJobs(jobs); renderUsers(users); renderQueues(queues); renderHosts(hosts); renderLicenses(licenses);
+  renderSummary(summary); renderSla(sla); renderAlerts(alerts); drawHistory(history); renderJobs(jobs); renderUsers(users); renderQueues(queues); renderHosts(hosts); renderLicenses(licenses);
 }
 function renderSummary(s){const t=s.totals;const data=[['运行作业',t.running_jobs,'RUN'],['等待作业',t.pending_jobs,'PEND'],['异常退出',t.exit_jobs,'EXIT'],['运行Slots',`${t.running_slots}/${t.max_slots}`,'SLOT'],['低内存效率',t.memory_waste_jobs,'WASTE'],['License风险',t.license_risks,'RISK']];$('#kpis').innerHTML=data.map(x=>`<div class="kpi"><small>${x[0]}</small><strong>${x[1]}</strong><em>${x[2]}</em></div>`).join('');const colors=['var(--cyan)','var(--blue)','var(--yellow)'];$('#gauges').innerHTML=[['CPU',s.efficiency.cpu_pct],['内存',s.efficiency.mem_pct],['Slot',s.efficiency.slot_pct]].map((x,i)=>{const value=x[1];return `<div class="gauge"><div class="ring" style="--value:${value??0};--color:${colors[i]}"><strong>${value===null?'—':`${value}%`}</strong></div><p>${x[0]}利用率${value===null?'（LSF 未提供总内存）':''}</p></div>`}).join('')}
+function renderSla(s){const observed=s.observed_samples,expected=s.expected_samples;$('#slaCoverage').textContent=`${s.coverage_pct}%`;$(' #slaCoverage').className=`${s.coverage_pct>=80?'good':'limited'}`;$('#slaCoverageDetail').textContent=`采样覆盖 ${observed}/${expected} 次`;
+  $('#slaCards').innerHTML=s.components.map(item=>{const value=item.availability_pct;const valueText=value===null?'—':`${value}%`;const detail=value===null?'尚无采集样本':`${item.good_samples}/${item.observed_samples} 次采集可用`;return `<article class="sla-card ${item.status}"><div><small>${item.title}</small><strong>${valueText}</strong></div><span>${item.status==='ok'?'正常':item.status==='degraded'?'有异常':'待观测'}</span><p>${detail}</p></article>`}).join('');
+  $('#slaTimeline').innerHTML=s.timeline.length?s.timeline.map(item=>`<i class="${item.status}" title="${item.collected_at}: ${item.status}${item.error?` · ${item.error}`:''}"></i>`).join(''):'<small>等待第一条采集快照</small>';
+  $('#slaFailures').textContent=s.failed_samples?`失败 ${s.failed_samples} 次 · 部分采集 ${s.partial_samples} 次`:s.partial_samples?`部分采集 ${s.partial_samples} 次`:'无失败样本';}
 function renderAlerts(rows){$('#alertCount').textContent=rows.length;$('#alerts').innerHTML=rows.length?rows.map(a=>`<div class="alert ${a.severity}"><i></i><div><b>${a.source}</b><small>${a.message}</small></div></div>`).join(''):'<small>当前没有活动告警</small>'}
 function drawHistory(rows){const c=$('#historyChart'),ctx=c.getContext('2d'),dpr=devicePixelRatio||1,w=c.clientWidth,h=230;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);ctx.strokeStyle='#203752';ctx.lineWidth=1;for(let i=1;i<5;i++){ctx.beginPath();ctx.moveTo(35,i*h/5);ctx.lineTo(w-10,i*h/5);ctx.stroke()}const max=Math.max(1,...rows.flatMap(r=>[r.running,r.pending]));[['running','#2bd9c9'],['pending','#f6c85f']].forEach(([key,color])=>{ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();rows.forEach((r,i)=>{const x=35+i*(w-50)/Math.max(1,rows.length-1),y=h-20-r[key]/max*(h-40);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()})}
 function memEfficiency(j){return j.requested_mem_mb?pct(j.used_mem_mb,j.requested_mem_mb):0}

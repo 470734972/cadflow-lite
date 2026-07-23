@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .collectors.base import Collector
@@ -88,3 +88,67 @@ def build_alerts(db: Database, cluster: str) -> list[dict[str, str]]:
         elif ratio >= 0.85:
             alerts.append({"severity": "warning", "source": item["feature"], "message": f"License usage is {ratio:.0%}"})
     return alerts
+
+
+SLA_COMPONENTS = (
+    ("collection", "采集链路", ()),
+    ("jobs", "LSF 作业", ("bjobs",)),
+    ("queues", "LSF 队列", ("bqueues",)),
+    ("hosts", "LSF 节点", ("bhosts", "lsload")),
+    ("licenses", "FlexNet License", ("lmstat",)),
+)
+
+
+def _component_available(snapshot: dict[str, Any], component: str, markers: tuple[str, ...]) -> bool:
+    """Determine availability from the saved collector outcome without inventing probes."""
+    status = str(snapshot.get("status", "")).lower()
+    error = str(snapshot.get("error", "")).lower()
+    if component == "collection":
+        return status == "ok"
+    if status == "ok":
+        return True
+    if markers and any(marker in error for marker in markers):
+        return False
+    # A partial snapshot preserves healthy LSF data when only another collector failed.
+    return status == "partial" and component != "licenses"
+
+
+def build_sla(
+    db: Database,
+    cluster: str,
+    collect_interval_seconds: int,
+    window_hours: int = 24,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Build a transparent snapshot-based SLA view for the dashboard."""
+    now = now or datetime.now(timezone.utc)
+    since = now - timedelta(hours=window_hours)
+    snapshots = db.sla_snapshots(cluster, since.isoformat())
+    expected = max(1, int(window_hours * 3600 / max(1, collect_interval_seconds)))
+    observed = len(snapshots)
+    coverage_pct = round(min(100, observed / expected * 100), 1)
+    components = []
+    for key, title, markers in SLA_COMPONENTS:
+        good = sum(_component_available(snapshot, key, markers) for snapshot in snapshots)
+        availability = round(good / observed * 100, 2) if observed else None
+        components.append({
+            "key": key,
+            "title": title,
+            "availability_pct": availability,
+            "good_samples": good,
+            "observed_samples": observed,
+            "status": "unknown" if not observed else "ok" if availability == 100 else "degraded",
+        })
+    return {
+        "window_hours": window_hours,
+        "expected_samples": expected,
+        "observed_samples": observed,
+        "coverage_pct": coverage_pct,
+        "partial_samples": sum(snapshot["status"] == "partial" for snapshot in snapshots),
+        "failed_samples": sum(snapshot["status"] == "error" for snapshot in snapshots),
+        "components": components,
+        "timeline": [
+            {"collected_at": snapshot["collected_at"], "status": snapshot["status"], "error": snapshot["error"][:120]}
+            for snapshot in snapshots[-24:]
+        ],
+    }

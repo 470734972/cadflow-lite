@@ -11,7 +11,7 @@ os.environ["CADFLOW_ADMIN_TOKEN"] = "test-token"
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import build_summary
+from app.services import build_sla, build_summary
 
 
 def test_health_and_summary():
@@ -21,6 +21,9 @@ def test_health_and_summary():
         summary = client.get("/api/summary").json()
         assert summary["cluster"] == "eda-lab"
         assert summary["totals"]["hosts"] == 8
+        sla = client.get("/api/sla").json()
+        assert sla["window_hours"] == 24
+        assert {"collection", "jobs", "queues", "hosts", "licenses"} == {item["key"] for item in sla["components"]}
         assert client.get("/metrics").status_code == 200
 
 
@@ -55,6 +58,22 @@ def test_summary_uses_host_capacity_when_lsf_queues_are_unlimited():
     assert summary["totals"]["running_slots"] == 4
     assert summary["totals"]["max_slots"] == 4
     assert summary["efficiency"]["slot_pct"] == 100
+
+
+def test_sla_keeps_lsf_available_when_only_flexnet_is_partial():
+    class FakeDb:
+        def sla_snapshots(self, cluster, since):
+            return [
+                {"collected_at": "2026-07-22T00:00:00+00:00", "status": "ok", "error": "", "duration_ms": 10},
+                {"collected_at": "2026-07-22T00:01:00+00:00", "status": "partial", "error": "lmstat timed out", "duration_ms": 20},
+                {"collected_at": "2026-07-22T00:02:00+00:00", "status": "error", "error": "bjobs timed out", "duration_ms": 30},
+            ]
+
+    sla = build_sla(FakeDb(), "eda_cluster", 60)
+    components = {item["key"]: item for item in sla["components"]}
+    assert components["licenses"]["availability_pct"] == round(1 / 3 * 100, 2)
+    assert components["jobs"]["availability_pct"] == round(2 / 3 * 100, 2)
+    assert components["queues"]["availability_pct"] == round(2 / 3 * 100, 2)
 
 
 def test_collect_requires_token():

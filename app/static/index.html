@@ -24,6 +24,11 @@
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><button id="refreshBtn">刷新数据</button></header>
 
     <section id="overview" class="view active">
+      <article class="panel sla-panel">
+        <div class="panel-title sla-heading"><div><span class="eyebrow">AVAILABILITY OBSERVATION</span><h2>核心功能 SLA</h2><small>基于近 24 小时 CADFlow 采集快照；不代表 LSF 或 License Server 的网络连通性探测。</small></div><div class="sla-window"><strong id="slaCoverage">—</strong><small id="slaCoverageDetail">等待采集样本</small></div></div>
+        <div id="slaCards" class="sla-grid"></div>
+        <div class="sla-footer"><span>最近 24 次采集</span><div id="slaTimeline" class="sla-timeline" aria-label="最近采集状态"></div><small id="slaFailures">无失败样本</small></div>
+      </article>
       <div id="kpis" class="kpi-grid"></div>
       <div class="grid two">
         <article class="panel"><div class="panel-title"><h2>资源利用率</h2><span>Latest</span></div><div id="gauges" class="gauges"></div></article>

@@ -16,7 +16,7 @@ from .collectors import DemoCollector, LsfCollector
 from .collectors.base import Collector
 from .config import RuntimeConfig, settings
 from .db import Database
-from .services import CollectionService, build_alerts, build_summary
+from .services import CollectionService, build_alerts, build_sla, build_summary
 
 
 class SetupCollector(Collector):
@@ -177,6 +177,12 @@ def summary() -> dict[str, Any]:
     return build_summary(db, runtime.config.cluster_name)
 
 
+@app.get("/api/sla")
+def sla() -> dict[str, Any]:
+    """Snapshot-based availability for the dashboard's core read-only collectors."""
+    return build_sla(db, runtime.config.cluster_name, runtime.config.collect_interval_seconds)
+
+
 @app.get("/api/jobs")
 def jobs(status: str | None = None, user: str | None = None, queue: str | None = None, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
     rows = db.latest_rows("jobs", runtime.config.cluster_name)
@@ -272,6 +278,7 @@ def refresh_from_web() -> dict[str, Any]:
 def metrics() -> str:
     summary_data = build_summary(db, runtime.config.cluster_name)
     totals, efficiency = summary_data["totals"], summary_data["efficiency"]
+    sla_data = build_sla(db, runtime.config.cluster_name, runtime.config.collect_interval_seconds)
     lines = [
         "# HELP cadflow_jobs Current jobs by status", "# TYPE cadflow_jobs gauge",
         f'cadflow_jobs{{cluster="{runtime.config.cluster_name}",status="running"}} {totals["running_jobs"]}',
@@ -285,4 +292,9 @@ def metrics() -> str:
         "# TYPE cadflow_collection_fresh gauge",
         f'cadflow_collection_fresh{{cluster="{runtime.config.cluster_name}"}} {1 if snapshot_freshness(db.snapshot_status(runtime.config.cluster_name))["freshness"] == "fresh" else 0}',
     ]
+    lines += ["# HELP cadflow_collector_availability_pct Snapshot-based collector availability over the last 24 hours", "# TYPE cadflow_collector_availability_pct gauge"]
+    lines.extend(
+        f'cadflow_collector_availability_pct{{cluster="{runtime.config.cluster_name}",component="{item["key"]}"}} {item["availability_pct"] if item["availability_pct"] is not None else 0}'
+        for item in sla_data["components"]
+    )
     return "\n".join(lines) + "\n"

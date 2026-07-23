@@ -227,5 +227,19 @@ class Database:
             ).fetchall()
             return [dict(row) for row in reversed(rows)]
 
+    def sla_snapshots(self, cluster: str, since: str, limit: int = 10000) -> list[dict[str, Any]]:
+        """Return raw collection outcomes for availability calculations only."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT collected_at, status, error, duration_ms
+                FROM snapshots
+                WHERE cluster=? AND collected_at>=?
+                ORDER BY id ASC LIMIT ?
+                """,
+                (cluster, since, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def dump_debug(self, cluster: str) -> str:
         return json.dumps({table: self.latest_rows(table, cluster) for table in ("jobs", "queues", "hosts", "licenses")})
