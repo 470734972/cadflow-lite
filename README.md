@@ -15,6 +15,7 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 | 节点 | 查看 Slots、CPU 利用率、Load、可用内存、`/tmp` 与 Swap 等 LSF 主机资源 |
 | License | 读取 FlexNet `lmstat`，按 Vendor、特征名和状态筛选许可证使用情况 |
 | 配置 | 在 Web 中分别配置 LSF 与 FlexNet 采集源，并通过只读 LSF 预检后启用真实采集 |
+| 安装升级 | Rocky Linux 一键安装、systemd 开机自启、稳定命令一键升级及失败自动回滚 |
 
 ## 产品界面
 
@@ -134,6 +135,14 @@ sudo -u cadflow bash -lc '
 
 ## 运行、日志与升级
 
+从本次版本开始，新安装会自动提供 `cadflow-update`。由旧版本升级到本版本时，先执行一次原有长命令：
+
+```bash
+sudo bash /opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
+```
+
+这次升级成功后，后续统一使用短命令：
+
 ```bash
 # 服务状态与日志
 sudo systemctl status cadflow-lite --no-pager
@@ -143,10 +152,24 @@ sudo journalctl -u cadflow-lite -f
 sudo systemctl restart cadflow-lite
 
 # 从 Gitee master 一键升级，失败自动回滚
-sudo bash /opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
+sudo cadflow-update
 ```
 
 服务由 systemd 管理，并在安装时启用开机自启；服务器重启后 CADFlow 会自动恢复。
+
+升级过程会自动拉取代码、创建独立版本目录、停止服务、备份 SQLite、原子切换版本并检查 `/api/health`。20 秒内未恢复健康会自动切回上一版本。
+
+升级到指定分支或标签：
+
+```bash
+sudo cadflow-update --ref v0.2.0
+```
+
+使用已下载的本地源码升级：
+
+```bash
+sudo cadflow-update --source /path/to/cadflow-lite
+```
 
 ## API
 
@@ -162,6 +185,8 @@ sudo bash /opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
 | `GET /metrics` | Prometheus 指标 |
 
 ## 开发验证
+
+代码交付与 README/Demo 图维护规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ```bash
 python3 -m pytest -q

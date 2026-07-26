@@ -34,6 +34,7 @@ python3 -m venv "$RELEASE/.venv"
 "$RELEASE/.venv/bin/pip" install "$RELEASE" -i "$PIP_INDEX_URL"
 "$RELEASE/.venv/bin/python" -m compileall -q "$RELEASE/app"
 chmod 0755 "$RELEASE/deploy/cadflow-serve"
+install -m 0755 "$RELEASE/deploy/cadflow-update" /usr/local/sbin/cadflow-update
 
 if [[ ! -f "$CONFIG_DIR/cadflow.env" ]]; then
   sed "s|^CADFLOW_DB_PATH=.*|CADFLOW_DB_PATH=$DATA_DIR/cadflow.db|" "$RELEASE/deploy/cadflow-lsf.env.example" > "$CONFIG_DIR/cadflow.env"
@@ -48,3 +49,4 @@ if [[ -z ${NO_FIREWALL:-} ]] && command -v firewall-cmd >/dev/null && firewall-c
 sleep 2; curl --fail --silent http://127.0.0.1:8080/api/health >/dev/null
 echo "Installed $(readlink -f "$APP_ROOT/current")"
 echo "Open: http://$(hostname -I | awk '{print $1}'):8080"
+echo "Future upgrades: sudo cadflow-update"

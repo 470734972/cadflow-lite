@@ -1,0 +1,7 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+deploy/cadflow-serve text eol=lf
+deploy/cadflow-update text eol=lf
+*.png binary
+*.zip binary
