@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 import threading
 import time
@@ -10,7 +11,11 @@ import time
 
 PASSWORD_SCHEME = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 310_000
-SESSION_TTL_SECONDS = 8 * 60 * 60
+DEFAULT_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+try:
+    SESSION_TTL_SECONDS = max(300, int(os.getenv("CADFLOW_CONFIG_SESSION_TTL_SECONDS", DEFAULT_SESSION_TTL_SECONDS)))
+except ValueError:
+    SESSION_TTL_SECONDS = DEFAULT_SESSION_TTL_SECONDS
 SESSION_COOKIE = "cadflow_config_session"
 _sessions: dict[str, float] = {}
 _sessions_lock = threading.Lock()

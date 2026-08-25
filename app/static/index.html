@@ -102,6 +102,7 @@
     <form id="configAuthForm" class="auth-card">
       <div class="auth-card-heading"><span class="section-icon">锁</span><div><h2>配置需要验证</h2><p>监控数据可直接查看，只有管理员可以进入采集源配置。</p></div></div>
       <label>配置管理口令<input id="configPassword" type="password" autocomplete="current-password" required placeholder="请输入口令"></label>
+      <small class="auth-hint">验证后 7 天内保持登录；如需缩短时长可设置 CADFLOW_CONFIG_SESSION_TTL_SECONDS。</small>
       <small id="configAuthMessage" class="auth-message" aria-live="polite"></small>
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
