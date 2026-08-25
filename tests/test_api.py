@@ -32,6 +32,9 @@ def test_health_and_summary():
         assert jobs
         assert not {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"} & jobs[0].keys()
         assert summary["totals"]["hosts"] == 8
+        queues = client.get("/api/queues").json()
+        assert queues
+        assert {"per_user_slots", "per_processor_slots", "per_host_slots"} <= queues[0].keys()
         sla = client.get("/api/sla").json()
         assert sla["window_hours"] == 24
         assert {"collection", "jobs", "queues", "hosts", "licenses"} == {item["key"] for item in sla["components"]}

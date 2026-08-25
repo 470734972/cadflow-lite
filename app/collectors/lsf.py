@@ -344,6 +344,11 @@ class LsfCollector(Collector):
         parsed = parse_whitespace_table(self.runner.run(["bqueues", "-w"]), {"QUEUE_NAME", "STATUS", "MAX", "PEND", "RUN", "SUSP"})
         return [{
             "name": row["QUEUE_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
+            # JL/U is the maximum number of job slots one user can consume
+            # in this queue; a dash means no per-user limit.
+            "per_user_slots": int(_number(row.get("JL/U", ""))),
+            "per_processor_slots": _number(row.get("JL/P", "")),
+            "per_host_slots": _number(row.get("JL/H", "")),
             "running": int(_number(row["RUN"])), "pending": int(_number(row["PEND"])), "suspended": int(_number(row["SUSP"])),
         } for row in parsed]
 

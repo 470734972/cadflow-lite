@@ -116,7 +116,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
                 return "2|bob|PEND|normal|login02|-|waiting_job|2026-07-22T10:31:00+00:00|1|-|-|-\n"
             outputs = {
                 "bjobs": "1|alice|RUN|normal|login01|compute01|vcs_compile_top|2026-07-22T10:30:00+00:00|8|12G|01:00:00|orion\n",
-                "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - - - - 11 3 8 0 0\n",
+                "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - 5 0.5 2 - 11 3 8 0 0\n",
                 "bhosts": "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",
                 "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01.eda.lan ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
                 "lshosts": "HOST_NAME type model cpuf ncpus maxmem maxswp maxtmp rexpri server RESOURCES\ncompute01.eda.lan X86_64 model 2.0 64 256G 128G 100G 0 1 -\n",
@@ -128,6 +128,9 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     payload = LsfCollector(20, "/path/to/lmstat", ("27000@license-host",), license_vendor="snpslmd", runner=runner).collect()
     assert payload["jobs"][0]["runtime_seconds"] == 3600
     assert payload["jobs"][0]["requested_mem_mb"] == 0
+    assert payload["queues"][0]["per_user_slots"] == 5
+    assert payload["queues"][0]["per_processor_slots"] == 0.5
+    assert payload["queues"][0]["per_host_slots"] == 2
     assert payload["jobs"][0]["submit_host"] == "login01"
     assert payload["jobs"][0]["job_name"] == "vcs_compile_top"
     assert any(job["status"] == "PEND" for job in payload["jobs"])

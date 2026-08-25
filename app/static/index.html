@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.9">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.10">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -32,7 +32,7 @@
       <button class="nav" data-view="config"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg></span>配置</button>
     </nav>
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small><small id="healthDetail">正在读取最近一次采集结果</small></div></div>
-    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.9</span></div>
+    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.10</span></div>
   </aside>
   <main>
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><div class="header-actions"><button id="themeToggle" type="button" aria-pressed="false" title="切换到深色模式">深色模式</button><button id="refreshBtn">刷新数据</button></div></header>
@@ -59,9 +59,9 @@
         <div id="queueSummary" class="queue-summary-grid"></div>
         <div class="queue-dashboard-divider"></div>
         <div class="queue-controls-heading"><div><h3>筛选与排序</h3><small>筛选只影响下方表格，不会改变采集数据。</small></div></div>
-        <div class="queue-filter-grid"><label>队列名称<input id="queueSearch" type="search" placeholder="输入队列名称" autocomplete="off"></label><label>开放状态<select id="queueStatusFilter"><option value="">全部状态</option><option value="open">开放队列</option><option value="inactive">窗口未开启</option><option value="closed">已关闭</option></select></label><label>当前负载<select id="queueLoadFilter"><option value="">全部负载</option><option value="running">有运行作业</option><option value="pending">有等待作业</option><option value="suspended">有挂起作业</option><option value="idle">空闲队列</option></select></label><label>排序<select id="queueSort"><option value="name">名称</option><option value="running">运行作业最多</option><option value="pending">等待作业最多</option><option value="suspended">挂起作业最多</option><option value="utilization">并发利用率最高</option></select></label><button id="queueReset" class="secondary-button" type="button">重置筛选</button></div>
+        <div class="queue-filter-grid"><label>队列名称<input id="queueSearch" type="search" placeholder="输入队列名称" autocomplete="off"></label><label>开放状态<select id="queueStatusFilter"><option value="">全部状态</option><option value="open">开放队列</option><option value="inactive">窗口未开启</option><option value="closed">已关闭</option></select></label><label>当前负载<select id="queueLoadFilter"><option value="">全部负载</option><option value="running">有运行作业</option><option value="pending">有等待作业</option><option value="suspended">有挂起作业</option><option value="idle">空闲队列</option></select></label><label>排序<select id="queueSort"><option value="name">名称</option><option value="running">运行作业最多</option><option value="pending">等待作业最多</option><option value="suspended">挂起作业最多</option><option value="utilization">并发利用率最高</option><option value="per_user_slots">单用户并发上限最高</option></select></label><button id="queueReset" class="secondary-button" type="button">重置筛选</button></div>
       </article>
-      <article class="panel queue-table-panel"><div class="queue-table-heading"><div><h2>队列明细</h2><small>运行 / 并发上限；“不限”表示 LSF 未设置队列最大并发作业数。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="queue-table"><thead><tr><th>队列</th><th>状态</th><th>运行 / 并发上限</th><th>等待</th><th>挂起</th><th>并发利用率</th><th>负载提示</th></tr></thead><tbody id="queueRows"></tbody></table></div></article>
+      <article class="panel queue-table-panel"><div class="queue-table-heading"><div><h2>队列明细</h2><small>运行 / 队列并发上限；单用户并发来自 LSF 的 JL/U，“不限”表示未设置限制。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="queue-table"><thead><tr><th>队列</th><th>状态</th><th>运行 / 队列并发上限</th><th>单用户并发上限</th><th>等待</th><th>挂起</th><th>并发利用率</th><th>负载提示</th></tr></thead><tbody id="queueRows"></tbody></table></div></article>
     </section>
     <section id="hosts" class="view">
       <article class="panel host-dashboard">
