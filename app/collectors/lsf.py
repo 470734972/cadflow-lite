@@ -285,23 +285,39 @@ class LsfCollector(Collector):
         return payload
 
     def _jobs(self) -> list[dict]:
-        output = self.runner.run([
-            "bjobs", "-u", "all", "-a", "-noheader", "-o",
+        format_args = [
+            "-noheader", "-o",
             "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'",
-        ])
-        parsed = parse_pipe_table(
-            output,
-            ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"],
-            embedded_delimiter_index=6,
-        )
-        return [{
-            "job_id": row["job_id"], "user": row["user"], "status": row["status"], "queue": row["queue"],
-            "submit_host": row["submit_host"] or "-", "exec_host": row["exec_host"] or "-",
-            "job_name": row["job_name"], "submit_time": row["submit_time"], "slots": max(1, int(_number(row["slots"], 1))),
-            # LSF max_mem is measured usage, not an rusage[mem] request. Keep request unknown rather than invent it.
-            "requested_mem_mb": 0, "used_mem_mb": _number(row["max_mem"]), "cpu_efficiency": 0,
-            "runtime_seconds": parse_duration_seconds(row["runtime"]), "pending_reason": "", "project": row["project"],
-        } for row in parsed]
+        ]
+        columns = ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"]
+        output = self.runner.run(["bjobs", "-u", "all", "-a", *format_args])
+
+        def parse_output(text: str) -> list[dict[str, str]]:
+            return parse_pipe_table(text, columns, embedded_delimiter_index=6)
+
+        parsed_rows = parse_output(output)
+        # Some older LSF installations do not include pending jobs in the
+        # custom ``bjobs -a -o`` result even though ``bjobs -p -u all`` does.
+        # Only issue the extra read-only query when the full result has no
+        # PEND row, and merge by Job ID so a job is never shown twice.
+        if not any(row["status"].upper() == "PEND" for row in parsed_rows):
+            try:
+                pending_output = self.runner.run(["bjobs", "-p0", "-u", "all", *format_args])
+                parsed_rows.extend(parse_output(pending_output))
+            except (CommandError, ParseError):
+                pass
+
+        jobs: dict[str, dict] = {}
+        for row in parsed_rows:
+            jobs[row["job_id"]] = {
+                "job_id": row["job_id"], "user": row["user"], "status": row["status"], "queue": row["queue"],
+                "submit_host": row["submit_host"] or "-", "exec_host": row["exec_host"] or "-",
+                "job_name": row["job_name"], "submit_time": row["submit_time"], "slots": max(1, int(_number(row["slots"], 1))),
+                # LSF max_mem is measured usage, not an rusage[mem] request. Keep request unknown rather than invent it.
+                "requested_mem_mb": 0, "used_mem_mb": _number(row["max_mem"]), "cpu_efficiency": 0,
+                "runtime_seconds": parse_duration_seconds(row["runtime"]), "pending_reason": "", "project": row["project"],
+            }
+        return list(jobs.values())
 
     def _queues(self) -> list[dict]:
         # LSF 10.1.0.0 does not support bqueues -o or -noheader. The standard

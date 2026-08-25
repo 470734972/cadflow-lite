@@ -1,6 +1,6 @@
 # CADFlow Lite
 
-当前版本：`v0.3.3`
+当前版本：`v0.3.4`
 
 CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在支持 Bash、Python 和可选 systemd 的 Linux 主机上部署，也可由普通账户在 LSF 登录节点手动运行。
 
@@ -21,6 +21,8 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 | 版本信息 | 左侧栏底部显示当前 CADFlow Lite 发布版本，便于确认部署版本 |
 | 品牌导航 | 左侧品牌标识、浏览器标签页使用 CADFlow 数据流 SVG 图标，各功能导航配有离线内置图标 |
 | 安装升级 | Linux 一键安装、可选 systemd 开机自启、普通账户一键升级；配置页面可发起受保护的代码更新并重启 |
+
+`v0.3.4` 增强了 LSF 作业采集：当完整作业快照没有 PEND 记录时，显式补采 `bjobs -p0 -u all`，兼容部分旧版 LSF 未在 `bjobs -a -o` 输出中返回 PEND 作业的情况，并按 Job ID 去重。
 
 ## 产品界面
 
