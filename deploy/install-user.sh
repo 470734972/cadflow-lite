@@ -111,7 +111,7 @@ command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v flock >/dev/null 2>&1 || fail "flock is required"
 
 python_supported() {
-  "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1
+  "$1" -c 'import sys, sqlite3; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1
 }
 
 if [[ -n "$PYTHON_BIN" ]]; then
@@ -119,7 +119,7 @@ if [[ -n "$PYTHON_BIN" ]]; then
     PYTHON_BIN=$(command -v "$PYTHON_BIN" || true)
   fi
   [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]] || fail "Python executable is not available: ${CADFLOW_PYTHON_BIN:-$PYTHON_BIN}"
-  python_supported "$PYTHON_BIN" || fail "Python 3.9+ is required: $PYTHON_BIN"
+  python_supported "$PYTHON_BIN" || fail "Python 3.9+ with the sqlite3 module is required: $PYTHON_BIN"
 else
   # RHEL-family hosts may keep an older system python3 beside a newer module.
   # Prefer the newest conventional executable without changing system config.
@@ -130,14 +130,14 @@ else
       break
     fi
   done
-  [[ -n "$PYTHON_BIN" ]] || fail "Python 3.9+ was not found; load a site-provided Python first"
+  [[ -n "$PYTHON_BIN" ]] || fail "Python 3.9+ with the sqlite3 module was not found; load a compatible site-provided Python first"
 fi
 
 PYTHON_VERSION=$($PYTHON_BIN -c 'import sys; print("%d.%d" % sys.version_info[:2])') || fail "cannot run $PYTHON_BIN"
 $VENV_DIR/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null || {
   major=${PYTHON_VERSION%%.*}
   minor=${PYTHON_VERSION#*.}
-  (( major > 3 || (major == 3 && minor >= 9) )) || fail "Python 3.9+ is required; found $PYTHON_VERSION"
+  (( major > 3 || (major == 3 && minor >= 9) )) || fail "Python 3.9+ with sqlite3 is required; found $PYTHON_VERSION"
 }
 
 cd "$APP_DIR"
@@ -158,7 +158,7 @@ fi
 VENV_PYTHON=$VENV_DIR/bin/python
 
 "$VENV_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || \
-  fail "the virtual environment must use Python 3.9+"
+  fail "the virtual environment must use Python 3.9+ with sqlite3"
 
 if [[ $SKIP_DEPS -eq 0 ]]; then
   if [[ -d "$WHEELHOUSE" ]]; then
