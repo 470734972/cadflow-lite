@@ -8,12 +8,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .collectors import DemoCollector, LsfCollector
 from .collectors.base import Collector
+from .auth import SESSION_COOKIE, SESSION_TTL_SECONDS, create_session, revoke_session, valid_session, verify_password
 from .config import RuntimeConfig, settings
 from .db import Database
 from .services import CollectionService, build_alerts, build_sla, build_summary
@@ -145,13 +146,44 @@ def index() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
 
+def require_config_session(config_session: str = Cookie(default="", alias=SESSION_COOKIE)) -> None:
+    if not settings.config_password_hash:
+        raise HTTPException(status_code=503, detail="configuration password is not set")
+    if not valid_session(config_session):
+        raise HTTPException(status_code=401, detail="configuration authentication required")
+
+
+@app.post("/api/config/auth")
+def authenticate_config(payload: dict[str, Any], response: Response) -> dict[str, Any]:
+    password = payload.get("password")
+    if not isinstance(password, str) or not password or not settings.config_password_hash:
+        raise HTTPException(status_code=401, detail="invalid configuration password")
+    if not verify_password(password, settings.config_password_hash):
+        raise HTTPException(status_code=401, detail="invalid configuration password")
+    response.set_cookie(
+        SESSION_COOKIE,
+        create_session(),
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+    )
+    return {"ok": True, "expires_in_seconds": SESSION_TTL_SECONDS}
+
+
+@app.post("/api/config/logout")
+def logout_config(response: Response, config_session: str = Cookie(default="", alias=SESSION_COOKIE)) -> dict[str, bool]:
+    revoke_session(config_session)
+    response.delete_cookie(SESSION_COOKIE)
+    return {"ok": True}
+
+
 @app.get("/api/config")
-def get_config() -> dict[str, Any]:
+def get_config(_: None = Depends(require_config_session)) -> dict[str, Any]:
     return runtime.config.to_dict()
 
 
 @app.put("/api/config")
-def update_config(payload: dict[str, Any]) -> dict[str, Any]:
+def update_config(payload: dict[str, Any], _: None = Depends(require_config_session)) -> dict[str, Any]:
     try:
         return runtime.update(payload)
     except (TypeError, ValueError) as exc:

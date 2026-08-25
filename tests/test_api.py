@@ -10,6 +10,10 @@ os.environ["CADFLOW_ADMIN_TOKEN"] = "test-token"
 
 from fastapi.testclient import TestClient
 
+from app.auth import hash_password
+
+os.environ["CADFLOW_CONFIG_PASSWORD_HASH"] = hash_password("config-pass")
+
 from app.main import app
 from app.services import build_sla, build_summary
 
@@ -17,6 +21,8 @@ from app.services import build_sla, build_summary
 def test_health_and_summary():
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
+        assert client.get("/api/config").status_code == 401
+        assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         assert client.get("/api/config").json()["mode"] == "demo"
         summary = client.get("/api/summary").json()
         assert summary["cluster"] == "demo-cluster"
@@ -80,6 +86,15 @@ def test_collect_requires_token():
     with TestClient(app) as client:
         assert client.post("/api/collect").status_code == 403
         assert client.post("/api/collect", headers={"X-Admin-Token": "test-token"}).status_code == 200
+
+
+def test_config_auth_rejects_wrong_password_and_supports_logout():
+    with TestClient(app) as client:
+        assert client.post("/api/config/auth", json={"password": "wrong"}).status_code == 401
+        assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
+        assert client.get("/api/config").status_code == 200
+        assert client.post("/api/config/logout").status_code == 200
+        assert client.get("/api/config").status_code == 401
 
 
 def test_web_refresh_runs_collection_without_exposing_admin_token():

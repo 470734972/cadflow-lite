@@ -228,6 +228,28 @@ EOF
   echo "Created configuration: $ENV_FILE"
 fi
 
+CONFIG_PASSWORD_GENERATED=""
+if ! grep -Eq '^CADFLOW_CONFIG_PASSWORD_HASH=[^[:space:]]+$' "$ENV_FILE"; then
+  umask 077
+  CONFIG_PASSWORD_GENERATED=$($VENV_PYTHON -c 'import secrets; print(secrets.token_urlsafe(12))')
+  CONFIG_PASSWORD_HASH=$(CADFLOW_CONFIG_PASSWORD="$CONFIG_PASSWORD_GENERATED" "$VENV_PYTHON" -c '
+import base64, hashlib, os, secrets
+password = os.environ["CADFLOW_CONFIG_PASSWORD"].encode("utf-8")
+iterations = 310000
+salt = secrets.token_bytes(16)
+digest = hashlib.pbkdf2_hmac("sha256", password, salt, iterations)
+encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+print(f"pbkdf2_sha256${iterations}${encode(salt)}${encode(digest)}")
+')
+  printf '\nCADFLOW_CONFIG_PASSWORD_HASH=%s\n' "$CONFIG_PASSWORD_HASH" >> "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+fi
+if [[ -n "$CONFIG_PASSWORD_GENERATED" ]]; then
+  # The running process cannot enforce the newly generated password until it
+  # is restarted, so make the first migration restart it automatically.
+  FORCE_RESTART=1
+fi
+
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
@@ -264,12 +286,19 @@ wait_health() {
   return 1
 }
 
+show_generated_config_password() {
+  if [[ -n "$CONFIG_PASSWORD_GENERATED" ]]; then
+    echo "配置管理口令（请立即保存）：$CONFIG_PASSWORD_GENERATED"
+  fi
+}
+
 OLD_PID=$(read_pid || true)
 if [[ -n "$OLD_PID" ]]; then
   if [[ $FORCE_RESTART -eq 0 ]]; then
     if wait_health; then
       echo "CADFlow is already running: PID=$OLD_PID"
       echo "Open: http://$(hostname -I 2>/dev/null | awk '{print $1}'):${CADFLOW_PORT:-$PORT}"
+      show_generated_config_password
       exit 0
     fi
     echo "Recorded process $OLD_PID is not healthy; restarting it"
@@ -288,6 +317,7 @@ if wait_health; then
   echo "Open: http://${SERVER_IP:-127.0.0.1}:${CADFLOW_PORT:-$PORT}"
   echo "Config: $ENV_FILE"
   echo "Log: $LOG_FILE"
+  show_generated_config_password
   echo "Next: open Web 配置 and enter the site-specific LSF/FlexNet paths"
   exit 0
 fi

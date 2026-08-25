@@ -19,6 +19,7 @@ class Settings:
     cluster_name: str = os.getenv("CADFLOW_CLUSTER_NAME", "demo-cluster")
     db_path: Path = Path(os.getenv("CADFLOW_DB_PATH", "./data/cadflow.db"))
     admin_token: str = os.getenv("CADFLOW_ADMIN_TOKEN", "")
+    config_password_hash: str = os.getenv("CADFLOW_CONFIG_PASSWORD_HASH", "")
     collect_interval_seconds: int = _int_env("CADFLOW_COLLECT_INTERVAL_SECONDS", 60)
     command_timeout_seconds: int = _int_env("CADFLOW_COMMAND_TIMEOUT_SECONDS", 20)
     stale_after_seconds: int = _int_env("CADFLOW_STALE_AFTER_SECONDS", 0)
