@@ -218,6 +218,14 @@ cd <项目目录>
 bash deploy/update-user.sh
 ```
 
+如果希望把拉取代码、口令迁移和后台重启合并为一条命令，直接执行：
+
+```bash
+bash deploy/update-and-start.sh
+```
+
+该入口使用当前 Git 上游（服务器部署时应指向内网 GitLab），执行 `git pull --ff-only` 后调用一键部署脚本并强制重启；不使用 `sudo` 或 `systemctl`。
+
 脚本会保留 `.venv`、`data/`、`logs/` 和 `backups/`，并输出新的提交号、PID、健康检查地址和日志路径。也可以指定分支：
 
 ```bash
