@@ -17,6 +17,14 @@ def test_pipe_table_rejects_unexpected_lsf_format():
         parse_pipe_table("840101|alice|RUN\n", ["job_id", "user"])
 
 
+def test_parse_pipe_table_allows_pipes_in_lsf_job_name():
+    columns = ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"]
+    text = "943700|jingbaoliu|RUN|int|lg9|rd11:rd11|pt_shell 2>&1 | tee pt_shell.log|Aug 20 17:24|8|65.3 Gbytes|434482|project-a\n"
+    rows = parse_pipe_table(text, columns, embedded_delimiter_index=6)
+    assert rows[0]["job_name"] == "pt_shell 2>&1 | tee pt_shell.log"
+    assert rows[0]["project"] == "project-a"
+
+
 def test_parse_legacy_whitespace_table():
     rows = parse_whitespace_table(
         "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",

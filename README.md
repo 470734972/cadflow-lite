@@ -76,6 +76,7 @@ FlexNet 命令 (lmstat -a) ─────────────────�
 
 - 采集命令固定为只读白名单：`bjobs`、`bqueues`、`bhosts`、`lsload`、`lmstat`。
 - LSF 和 FlexNet 失败彼此隔离：License 暂不可用时，LSF 的作业、队列和节点数据仍可继续采集。
+- LSF 作业名称按固定字段解析，即使命令行名称包含 `|` 管道符，也不会破坏作业表格。
 - 采集结果保存在 SQLite（WAL 模式）；`/metrics` 可供 Prometheus 抓取。
 - 首页 SLA 使用近 24 小时采集快照计算 LSF 作业、队列、节点、FlexNet License 与整体采集链路的可用性，同时公开样本覆盖率；它不替代独立的网络/端口存活探针。
 

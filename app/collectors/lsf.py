@@ -102,13 +102,31 @@ def parse_duration_seconds(value: str) -> int:
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
-def parse_pipe_table(text: str, columns: list[str]) -> list[dict[str, str]]:
+def parse_pipe_table(text: str, columns: list[str], embedded_delimiter_index: Optional[int] = None) -> list[dict[str, str]]:
+    """Parse a pipe table, optionally allowing delimiters in one field.
+
+    LSF job names are user-controlled shell commands and may contain literal
+    pipes (for example ``cmd 2>&1 | tee build.log``).  When the caller knows
+    which column carries that value, split the fixed prefix from the fixed
+    suffix so the embedded delimiters stay inside the field.
+    """
     rows: list[dict[str, str]] = []
     for raw in text.splitlines():
         raw = raw.strip()
         if not raw or raw.startswith(("No unfinished job", "No matching job", "No job found")):
             continue
-        values = [value.strip() for value in raw.split("|")]
+        if embedded_delimiter_index is None:
+            values = [value.strip() for value in raw.split("|")]
+        else:
+            suffix_count = len(columns) - embedded_delimiter_index - 1
+            if not 0 <= embedded_delimiter_index < len(columns) or suffix_count < 0:
+                raise ParseError("embedded delimiter column is outside the table")
+            prefix = raw.split("|", embedded_delimiter_index)
+            if len(prefix) != embedded_delimiter_index + 1:
+                raise ParseError(f"expected {len(columns)} columns, received {len(prefix)} in: {raw[:200]}")
+            suffix = prefix.pop().rsplit("|", suffix_count)
+            values = prefix + suffix
+            values = [value.strip() for value in values]
         if len(values) != len(columns):
             raise ParseError(f"expected {len(columns)} columns, received {len(values)} in: {raw[:200]}")
         rows.append(dict(zip(columns, values)))
@@ -236,7 +254,11 @@ class LsfCollector(Collector):
             "bjobs", "-u", "all", "-a", "-noheader", "-o",
             "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'",
         ])
-        parsed = parse_pipe_table(output, ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"])
+        parsed = parse_pipe_table(
+            output,
+            ["job_id", "user", "status", "queue", "submit_host", "exec_host", "job_name", "submit_time", "slots", "max_mem", "runtime", "project"],
+            embedded_delimiter_index=6,
+        )
         return [{
             "job_id": row["job_id"], "user": row["user"], "status": row["status"], "queue": row["queue"],
             "submit_host": row["submit_host"] or "-", "exec_host": row["exec_host"] or "-",
