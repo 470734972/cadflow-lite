@@ -16,6 +16,7 @@ os.environ["CADFLOW_CONFIG_PASSWORD_HASH"] = hash_password("config-pass")
 
 from app.main import app
 from app.services import build_sla, build_summary
+import app.main as main_module
 
 
 def test_health_and_summary():
@@ -96,6 +97,31 @@ def test_config_auth_rejects_wrong_password_and_supports_logout():
         assert client.get("/api/config").status_code == 200
         assert client.post("/api/config/logout").status_code == 200
         assert client.get("/api/config").status_code == 401
+
+
+def test_web_update_requires_config_auth_and_starts_fixed_script(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakeProcess:
+        pid = 1234
+
+        def wait(self):
+            return 0
+
+    def fake_popen(argv, **kwargs):
+        calls["argv"] = argv
+        calls["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(main_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(main_module, "UPDATE_LOG", tmp_path / "update.log")
+    with TestClient(app) as client:
+        assert client.post("/api/update").status_code == 401
+        assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
+        response = client.post("/api/update")
+        assert response.status_code == 200
+        assert calls["argv"][0] == "bash"
+        assert calls["argv"][-1].endswith("deploy\\update-and-start.sh") or calls["argv"][-1].endswith("deploy/update-and-start.sh")
 
 
 def test_web_refresh_runs_collection_without_exposing_admin_token():

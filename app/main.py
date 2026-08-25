@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import subprocess
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -81,6 +82,10 @@ class Runtime:
 settings.validate()
 db = Database(settings.db_path)
 runtime = Runtime(db, RuntimeConfig.from_settings(settings))
+APP_ROOT = Path(__file__).resolve().parent.parent
+UPDATE_SCRIPT = APP_ROOT / "deploy" / "update-and-start.sh"
+UPDATE_LOG = APP_ROOT / "logs" / "update-from-web.log"
+_update_lock = threading.Lock()
 
 
 async def collection_loop() -> None:
@@ -136,7 +141,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="CADFlow Lite", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="CADFlow Lite", version="0.3.0", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -188,6 +193,39 @@ def update_config(payload: dict[str, Any], _: None = Depends(require_config_sess
         return runtime.update(payload)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _release_update_lock(process: subprocess.Popen) -> None:
+    try:
+        process.wait()
+    finally:
+        _update_lock.release()
+
+
+@app.post("/api/update")
+def trigger_update(_: None = Depends(require_config_session)) -> dict[str, Any]:
+    """Start the existing fast-forward update script after config auth."""
+    if not UPDATE_SCRIPT.is_file():
+        raise HTTPException(status_code=503, detail="update script is not available")
+    if not _update_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="an update is already running")
+    try:
+        UPDATE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with UPDATE_LOG.open("a", encoding="utf-8") as log_handle:
+            process = subprocess.Popen(
+                ["bash", str(UPDATE_SCRIPT)],
+                cwd=str(APP_ROOT),
+                stdin=subprocess.DEVNULL,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                close_fds=True,
+            )
+    except OSError as exc:
+        _update_lock.release()
+        raise HTTPException(status_code=503, detail=f"unable to start update: {exc}") from exc
+    threading.Thread(target=_release_update_lock, args=(process,), daemon=True).start()
+    return {"ok": True, "message": "update started; CADFlow will restart after the fast-forward update", "log": str(UPDATE_LOG)}
 
 
 @app.get("/api/health")
