@@ -230,6 +230,8 @@ bash deploy/update-and-start.sh
 
 更新锁只保护安装/重启过程，后台 CADFlow 服务不会持有该锁；如果看到“another CADFlow install/start operation is running”，先确认是否已有安装脚本正在执行，勿直接删除锁文件。
 
+安装脚本会自动兼容旧版本生成的 `CADFLOW_CONFIG_PASSWORD_HASH`，并将其中的 `$` 分隔符安全写入配置，避免 Bash `set -u` 把 PBKDF2 的迭代次数误解为位置参数。
+
 脚本会保留 `.venv`、`data/`、`logs/` 和 `backups/`，并输出新的提交号、PID、健康检查地址和日志路径。也可以指定分支：
 
 ```bash

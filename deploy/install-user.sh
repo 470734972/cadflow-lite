@@ -45,6 +45,27 @@ fail() {
   exit 1
 }
 
+normalize_config_password_hash() {
+  [[ -f "$ENV_FILE" ]] || return 0
+  local raw_hash tmp_file
+  raw_hash=$(sed -n 's/^CADFLOW_CONFIG_PASSWORD_HASH=//p' "$ENV_FILE" | head -n 1)
+  # PBKDF2 hashes contain literal '$' separators (for example $310000$).
+  # Quote an older unquoted entry before sourcing the env file under `set -u`.
+  [[ "$raw_hash" == pbkdf2_sha256\$* ]] || return 0
+  tmp_file="${ENV_FILE}.tmp.$$"
+  awk -v hash="$raw_hash" '
+    BEGIN { replaced = 0; quote = sprintf("%c", 39) }
+    /^CADFLOW_CONFIG_PASSWORD_HASH=/ && !replaced {
+      print "CADFLOW_CONFIG_PASSWORD_HASH=" quote hash quote
+      replaced = 1
+      next
+    }
+    { print }
+  ' "$ENV_FILE" > "$tmp_file" || { rm -f "$tmp_file"; fail "unable to normalize configuration password hash"; }
+  chmod 600 "$tmp_file"
+  mv -f "$tmp_file" "$ENV_FILE"
+}
+
 FORCE_RESTART=0
 SKIP_DEPS=0
 while [[ $# -gt 0 ]]; do
@@ -229,6 +250,7 @@ EOF
 fi
 
 CONFIG_PASSWORD_GENERATED=""
+normalize_config_password_hash
 if ! grep -Eq '^CADFLOW_CONFIG_PASSWORD_HASH=[^[:space:]]+$' "$ENV_FILE"; then
   umask 077
   CONFIG_PASSWORD_GENERATED=$($VENV_PYTHON -c 'import secrets; print(secrets.token_urlsafe(12))')
@@ -241,7 +263,7 @@ digest = hashlib.pbkdf2_hmac("sha256", password, salt, iterations)
 encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 print(f"pbkdf2_sha256${iterations}${encode(salt)}${encode(digest)}")
 ')
-  printf '\nCADFLOW_CONFIG_PASSWORD_HASH=%s\n' "$CONFIG_PASSWORD_HASH" >> "$ENV_FILE"
+  printf "\nCADFLOW_CONFIG_PASSWORD_HASH='%s'\n" "$CONFIG_PASSWORD_HASH" >> "$ENV_FILE"
   chmod 600 "$ENV_FILE"
 fi
 if [[ -n "$CONFIG_PASSWORD_GENERATED" ]]; then
