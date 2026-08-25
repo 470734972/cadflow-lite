@@ -6,7 +6,7 @@ import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -88,7 +88,7 @@ async def collection_loop() -> None:
         await asyncio.to_thread(runtime.collect)
 
 
-def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
+def snapshot_freshness(status: Optional[dict]) -> dict[str, Union[int, str]]:
     if not status:
         return {"freshness": "never", "age_seconds": -1}
     if status["status"] == "error":
@@ -100,7 +100,7 @@ def snapshot_freshness(status: dict | None) -> dict[str, int | str]:
     return {"freshness": "stale" if age_seconds > runtime.config.effective_stale_after_seconds else "fresh", "age_seconds": age_seconds}
 
 
-def collection_failure_detail(status: dict | None) -> dict[str, str] | None:
+def collection_failure_detail(status: Optional[dict]) -> Optional[dict[str, str]]:
     """Convert a raw collector failure into a concise UI-safe diagnosis."""
     if not status or status["status"] not in {"error", "partial"}:
         return None
@@ -184,7 +184,7 @@ def sla() -> dict[str, Any]:
 
 
 @app.get("/api/jobs")
-def jobs(status: str | None = None, user: str | None = None, queue: str | None = None, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
+def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Optional[str] = None, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
     rows = db.latest_rows("jobs", runtime.config.cluster_name)
     if status:
         rows = [row for row in rows if row["status"].lower() == status.lower()]
@@ -196,9 +196,9 @@ def jobs(status: str | None = None, user: str | None = None, queue: str | None =
 
 
 @app.get("/api/users")
-def users() -> list[dict[str, int | str]]:
+def users() -> list[dict[str, Union[int, str]]]:
     """Return one current-snapshot utilization row per LSF user."""
-    grouped: dict[str, dict[str, int | str]] = {}
+    grouped: dict[str, dict[str, Union[int, str]]] = {}
     for job in db.latest_rows("jobs", runtime.config.cluster_name):
         username = job["user"] or "unknown"
         row = grouped.setdefault(username, {

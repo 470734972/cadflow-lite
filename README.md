@@ -1,6 +1,6 @@
 # CADFlow Lite
 
-CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，适合在 Rocky Linux 上以原生 Python + systemd 方式部署。
+CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在 Rocky Linux 上以原生 Python + systemd 部署，也可由普通账户在 LSF 登录节点手动运行。
 
 不依赖 Docker、Podman、Docker Compose 或 Maven/POM；服务启动后直接访问 `http://服务器IP:8080`。
 
@@ -15,6 +15,7 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 | 节点 | 查看 Slots、CPU 利用率、Load、可用内存、`/tmp` 与 Swap 等 LSF 主机资源 |
 | License | 读取 FlexNet `lmstat`，按 Vendor、特征名和状态筛选许可证使用情况 |
 | 配置 | 在 Web 中分别配置 LSF 与 FlexNet 采集源，并通过只读 LSF 预检后启用真实采集 |
+| 主题 | 默认亮色显示，支持一键切换深色模式，并记住浏览器的选择 |
 | 安装升级 | Rocky Linux 一键安装、systemd 开机自启、稳定命令一键升级及失败自动回滚 |
 
 ## 产品界面
@@ -108,6 +109,69 @@ http://ROCKY_IP:8080
 ```bash
 sudo bash deploy/install-rocky10.sh --no-firewall
 ```
+
+## 离线普通账户部署（不使用 systemd）
+
+适用于不能访问外网、不能修改系统配置、且只允许普通账户运行的 LSF 登录节点。以下示例使用 Python 3.9；如果现场提供 Python 3.12，也可以将模块版本替换为 3.12。
+
+### 1. 在可联网机器准备 Linux 依赖
+
+不要在 Windows 上直接安装 Windows wheel。下载目标平台为 Linux x86_64、Python 3.9 的 wheel：
+
+```powershell
+py -3.12 -m pip download `
+  --dest C:\Temp\cadflow-offline\wheelhouse `
+  --only-binary=:all: `
+  --platform manylinux_2_17_x86_64 `
+  --implementation cp `
+  --python-version 3.9 `
+  "fastapi>=0.115,<1" `
+  "uvicorn>=0.30,<1"
+```
+
+将 `wheelhouse` 目录复制到服务器项目目录，例如 `/work3/ruichen/cadflow/wheelhouse`。这里安装基础 Uvicorn 即可，不需要 `uvicorn[standard]` 的可选本地扩展。
+
+### 2. 在服务器创建虚拟环境并离线安装
+
+```tcsh
+cd /work3/ruichen/cadflow
+module load runtime/python/3.9.7
+python3 -m venv .venv
+.venv/bin/python -m pip install --no-index --find-links=wheelhouse \
+  "fastapi>=0.115,<1" "uvicorn>=0.30,<1"
+```
+
+### 3. 以普通账户手动启动
+
+下面的 LSF 路径取自现场环境；集群名应以 `lsid` 输出为准。License Server 暂时留空时，作业、队列和节点仍可采集，之后可在 Web 的“配置”页面补充 FlexNet 参数。
+
+```tcsh
+setenv CADFLOW_MODE lsf
+setenv CADFLOW_CLUSTER_NAME bdrd
+setenv CADFLOW_DB_PATH /work3/ruichen/cadflow/data/cadflow.db
+setenv CADFLOW_BIND_HOST 0.0.0.0
+setenv CADFLOW_PORT 8080
+setenv CADFLOW_LSF_BIN_DIR /cadtools/lsf10.1/10.1/linux3.10-glibc2.17-x86_64/bin
+setenv CADFLOW_LMSTAT_PATH `which lmstat`
+setenv CADFLOW_LICENSE_SERVERS ""
+setenv CADFLOW_LICENSE_VENDOR ""
+setenv CADFLOW_ADMIN_TOKEN `./.venv/bin/python -c 'import secrets; print(secrets.token_hex(32))'`
+
+mkdir -p data logs
+nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 >& logs/cadflow.log &
+echo $! > cadflow.pid
+```
+
+验证与停止：
+
+```tcsh
+sleep 3
+curl -s http://127.0.0.1:8080/api/health
+tail -n 80 logs/cadflow.log
+kill `cat cadflow.pid`
+```
+
+该方式只在当前用户目录创建 `.venv`、SQLite 数据和日志，不创建 systemd 服务，不修改防火墙、LSF 配置或系统 Python。
 
 ## 配置真实 LSF / FlexNet
 

@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 
 SCHEMA = """
@@ -137,7 +137,7 @@ class Database:
             if name not in columns:
                 conn.execute(f"ALTER TABLE hosts ADD COLUMN {name} {definition}")
 
-    def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0, warnings: list[str] | None = None) -> int:
+    def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0, warnings: Optional[list[str]] = None) -> int:
         with self._lock, self.connect() as conn:
             warnings = warnings or []
             cursor = conn.execute(
@@ -162,7 +162,7 @@ class Database:
                 (cluster, collected_at, duration_ms, error[:1000]),
             )
 
-    def load_config(self, key: str) -> dict[str, Any] | None:
+    def load_config(self, key: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:
             row = conn.execute("SELECT value FROM app_config WHERE key=?", (key,)).fetchone()
             return json.loads(row["value"]) if row else None
@@ -184,7 +184,7 @@ class Database:
         sql = f"INSERT INTO {table}(snapshot_id,{','.join(columns)}) VALUES (?,{placeholders})"
         conn.executemany(sql, [[snapshot_id, *[row.get(column) for column in columns]] for row in rows])
 
-    def latest_snapshot_id(self, cluster: str) -> int | None:
+    def latest_snapshot_id(self, cluster: str) -> Optional[int]:
         with self.connect() as conn:
             row = conn.execute(
                 "SELECT id FROM snapshots WHERE cluster=? AND status IN ('ok', 'partial') ORDER BY id DESC LIMIT 1", (cluster,)
@@ -202,7 +202,7 @@ class Database:
             rows = conn.execute(f"SELECT * FROM {table} WHERE snapshot_id=?", (snapshot_id,)).fetchall()
             return [{key: row[key] for key in row.keys() if key != "snapshot_id"} for row in rows]
 
-    def snapshot_status(self, cluster: str) -> dict[str, Any] | None:
+    def snapshot_status(self, cluster: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:
             row = conn.execute(
                 "SELECT id, cluster, collected_at, status, duration_ms, error FROM snapshots WHERE cluster=? ORDER BY id DESC LIMIT 1",

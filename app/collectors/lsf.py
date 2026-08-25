@@ -5,7 +5,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Mapping, Optional, Sequence, Union
 
 from .base import Collector
 
@@ -23,7 +23,7 @@ class SafeRunner:
 
     ALLOWED = {"bjobs", "bqueues", "bhosts", "lsload", "lmstat"}
 
-    def __init__(self, timeout: int = 20, lsf_bin_dir: Path | None = None, lmstat_path: Path | None = None, extra_env: Mapping[str, str] | None = None):
+    def __init__(self, timeout: int = 20, lsf_bin_dir: Optional[Path] = None, lmstat_path: Optional[Path] = None, extra_env: Optional[Mapping[str, str]] = None):
         self.timeout = timeout
         self.lsf_bin_dir = lsf_bin_dir.resolve() if lsf_bin_dir else None
         self.lmstat_path = lmstat_path.resolve() if lmstat_path else None
@@ -160,8 +160,8 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     return result
 
 
-def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, str | int]]:
-    features: list[dict[str, str | int]] = []
+def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, Union[str, int]]]:
+    features: list[dict[str, Union[str, int]]] = []
     counted_pattern = re.compile(
         r"Users of (?P<feature>[^:]+):.*?Total of (?P<total>\d+) licenses issued;.*?Total of (?P<used>\d+) licenses in use",
         re.I | re.S,
@@ -204,8 +204,8 @@ class LsfCollector(Collector):
         license_servers: tuple[str, ...],
         lsf_bin_dir: str = "",
         license_vendor: str = "",
-        lsf_env: Mapping[str, str] | None = None,
-        runner: SafeRunner | None = None,
+        lsf_env: Optional[Mapping[str, str]] = None,
+        runner: Optional[SafeRunner] = None,
     ):
         self.runner = runner or SafeRunner(
             timeout,

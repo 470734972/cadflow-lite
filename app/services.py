@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional
 
 from .collectors.base import Collector
 from .db import Database
@@ -118,7 +118,7 @@ def build_sla(
     cluster: str,
     collect_interval_seconds: int,
     window_hours: int = 24,
-    now: datetime | None = None,
+    now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """Build a transparent snapshot-based SLA view for the dashboard."""
     now = now or datetime.now(timezone.utc)
