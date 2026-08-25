@@ -95,7 +95,8 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
                 "bjobs": "1|alice|RUN|normal|login01|compute01|vcs_compile_top|2026-07-22T10:30:00+00:00|8|12G|01:00:00|orion\n",
                 "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - - - - 11 3 8 0 0\n",
                 "bhosts": "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",
-                "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
+                "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01.eda.lan ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
+                "lshost": "HOST_NAME type model cpuf ncpus maxmem maxswp maxtmp rexpri server RESOURCES\ncompute01.eda.lan X86_64 model 2.0 64 256G 128G 100G 0 1 -\n",
                 "lmstat": "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)\n",
             }
             return outputs[argv[0]]
@@ -107,6 +108,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["jobs"][0]["submit_host"] == "login01"
     assert payload["jobs"][0]["job_name"] == "vcs_compile_top"
     assert payload["hosts"][0]["cpu_pct"] == 72
+    assert payload["hosts"][0]["total_mem_mb"] == 262144
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands

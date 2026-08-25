@@ -203,6 +203,16 @@ def parse_lshost(text: str) -> dict[str, dict[str, float]]:
     return result
 
 
+def host_data(records: dict[str, dict[str, float]], name: str) -> dict[str, float]:
+    """Match LSF records by exact name, then by a unique short/FQDN name."""
+    if name in records:
+        return records[name]
+    normalize = lambda value: value.strip().rstrip(".").lower().split(".", 1)[0]
+    target = normalize(name)
+    matches = [record for key, record in records.items() if normalize(key) == target]
+    return matches[0] if len(matches) == 1 else {}
+
+
 def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, Union[str, int]]]:
     features: list[dict[str, Union[str, int]]] = []
     counted_pattern = re.compile(
@@ -317,8 +327,8 @@ class LsfCollector(Collector):
         hosts = []
         for row in parsed:
             name = row["HOST_NAME"]
-            load = loads.get(name, {})
-            total_mem_mb = capacities.get(name, {}).get("total_mem_mb", 0)
+            load = host_data(loads, name)
+            total_mem_mb = host_data(capacities, name).get("total_mem_mb", 0)
             free_mem_mb = load.get("free_mem_mb", 0)
             hosts.append({
                 "name": name, "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
