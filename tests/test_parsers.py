@@ -44,6 +44,27 @@ def test_duration_and_lsload_parsing():
     assert loads == {"compute01": {"cpu_pct": 72, "load_1m": 0.2, "load_15m": 0.3, "free_mem_mb": 131072, "free_tmp_mb": 0, "free_swap_mb": 65536}}
 
 
+def test_parse_lsload_explicit_delimiter_keeps_unknown_values():
+    loads = parse_lsload(
+        "HOST_NAME|status|r1m|r15m|ut|tmp|swp|mem\n"
+        "lg12|ok|0.0|0.3|0%|128G|995.5G|-\n"
+    )
+    assert loads["lg12"] == {
+        "cpu_pct": 0, "load_1m": 0, "load_15m": 0.3,
+        "free_mem_mb": 0, "free_tmp_mb": 131072, "free_swap_mb": 1019392,
+    }
+
+
+def test_parse_lsload_legacy_short_row_is_not_dropped():
+    loads = parse_lsload(
+        "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\n"
+        "lg12 ok 0.0 0.0 0.3 0% 0.0 0 186510648G 128G 995.5G\n"
+    )
+    assert loads["lg12"]["free_tmp_mb"] == 131072
+    assert loads["lg12"]["free_swap_mb"] == 1019392
+    assert loads["lg12"]["free_mem_mb"] == 0
+
+
 def test_parse_lshosts_total_memory():
     capacities = parse_lshosts(
         "HOST_NAME type model cpuf ncpus maxmem maxswp maxtmp rexpri server RESOURCES\n"
@@ -115,6 +136,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
+    assert ["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"] in runner.commands
 
 
 def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():

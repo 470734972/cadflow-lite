@@ -149,8 +149,19 @@ def parse_whitespace_table(text: str, required: set[str]) -> list[dict[str, str]
 
 
 def parse_lsload(text: str) -> dict[str, dict[str, float]]:
-    """Return actual LSF load-index values keyed by host from `lsload -w` output."""
-    lines = [line.split() for line in text.splitlines() if line.strip()]
+    """Return actual LSF load-index values keyed by host.
+
+    The collector normally requests a delimiter-separated field list.  This
+    avoids a legacy ``lsload -w`` quirk where a host with an unavailable
+    trailing index can produce one fewer whitespace-delimited value.  The
+    whitespace parser remains as a compatibility fallback for older LSF
+    installations and pads a single missing trailing field instead of
+    silently dropping the host.
+    """
+    raw_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    delimiter = "|" if any("|" in line for line in raw_lines) else None
+    lines = [line.split(delimiter) if delimiter else line.split() for line in raw_lines]
+    lines = [[value.strip() for value in values] for values in lines]
     header_index = next((index for index, values in enumerate(lines) if "HOST_NAME" in values), None)
     if header_index is None:
         raise ParseError("lsload output does not contain HOST_NAME header")
@@ -161,6 +172,14 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     result: dict[str, dict[str, float]] = {}
     for values in lines[header_index + 1 :]:
         if len(values) < len(headers):
+            # Some older ``lsload -w`` builds omit an unavailable final
+            # index instead of printing ``-``.  Keep the host and expose the
+            # missing metric as unknown rather than losing the whole row.
+            if delimiter is None and len(values) == len(headers) - 1:
+                values = [*values, "-"]
+            else:
+                continue
+        if len(values) > len(headers):
             continue
         row = dict(zip(headers, values))
         host = row["host_name"]
@@ -331,7 +350,14 @@ class LsfCollector(Collector):
     def _hosts(self) -> list[dict]:
         # Use the legacy-compatible standard table for the same reason as bqueues.
         hosts_output = self.runner.run(["bhosts", "-w"])
-        load_output = self.runner.run(["lsload", "-w"])
+        # Request only the fields used by CADFlow with an explicit delimiter.
+        # Unlike ``-w``, this preserves empty/unknown trailing fields and
+        # avoids variable-width rows on hosts such as lg12.  Fall back to the
+        # legacy wide table for older LSF clients that do not support ``-o``.
+        try:
+            load_output = self.runner.run(["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"])
+        except CommandError:
+            load_output = self.runner.run(["lsload", "-w"])
         loads = parse_lsload(load_output)
         try:
             capacities = parse_lshosts(self.runner.run(["lshosts", "-w"]))
