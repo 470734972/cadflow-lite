@@ -139,17 +139,18 @@ if [[ -n "$PYTHON_BIN" ]]; then
 else
   # RHEL-family hosts may keep an older system python3 beside a newer module.
   # Prefer the newest conventional executable without changing system config.
-  for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
-    candidate_path=$(command -v "$candidate" || true)
-    if [[ -n "$candidate_path" ]] && python_supported "$candidate_path" && python_has_sqlite "$candidate_path"; then
-      PYTHON_BIN=$candidate_path
-      break
-    fi
-  done
-  if [[ -z "$PYTHON_BIN" && -d "$WHEELHOUSE" ]]; then
+  if [[ -d "$WHEELHOUSE" ]]; then
     for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
       candidate_path=$(command -v "$candidate" || true)
       if [[ -n "$candidate_path" ]] && python_supported "$candidate_path"; then
+        PYTHON_BIN=$candidate_path
+        break
+      fi
+    done
+  else
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
+      candidate_path=$(command -v "$candidate" || true)
+      if [[ -n "$candidate_path" ]] && python_supported "$candidate_path" && python_has_sqlite "$candidate_path"; then
         PYTHON_BIN=$candidate_path
         break
       fi
