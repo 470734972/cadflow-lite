@@ -57,7 +57,13 @@ class Runtime:
             )
         else:
             collector = SetupCollector()
-        return CollectionService(self.db, collector, config.cluster_name)
+        return CollectionService(
+            self.db,
+            collector,
+            config.cluster_name,
+            retention_days=config.db_retention_days,
+            max_db_size_mb=config.db_max_size_mb,
+        )
 
     def update(self, payload: dict[str, Any]) -> dict[str, Any]:
         candidate = RuntimeConfig.from_dict(payload)
@@ -141,7 +147,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.10", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.18", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -234,6 +240,7 @@ def health() -> dict[str, Any]:
     status = db.snapshot_status(runtime.config.cluster_name)
     freshness = snapshot_freshness(status)
     return {
+        "version": app.version,
         "status": "setup" if runtime.config.mode == "setup" else "ok" if freshness["freshness"] == "fresh" else "degraded",
         "mode": runtime.config.mode,
         "cluster": runtime.config.cluster_name,
@@ -255,7 +262,7 @@ def sla() -> dict[str, Any]:
 
 
 @app.get("/api/jobs")
-def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Optional[str] = None, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
+def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Optional[str] = None, limit: int = Query(1000, ge=1, le=1000)) -> list[dict]:
     rows = db.latest_rows("jobs", runtime.config.cluster_name)
     if status:
         rows = [row for row in rows if row["status"].lower() == status.lower()]

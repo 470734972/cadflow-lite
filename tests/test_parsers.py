@@ -139,6 +139,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
+    assert ["bjobs", "-p", "-u", "all", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
     assert ["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"] in runner.commands
 
 

@@ -10,10 +10,19 @@ from .db import Database
 
 
 class CollectionService:
-    def __init__(self, db: Database, collector: Collector, cluster: str):
+    def __init__(
+        self,
+        db: Database,
+        collector: Collector,
+        cluster: str,
+        retention_days: int = 7,
+        max_db_size_mb: int = 1024,
+    ):
         self.db = db
         self.collector = collector
         self.cluster = cluster
+        self.retention_days = retention_days
+        self.max_db_size_mb = max_db_size_mb
         self._run_lock = threading.Lock()
 
     def run(self) -> dict[str, Any]:
@@ -26,7 +35,22 @@ class CollectionService:
             duration_ms = int((time.monotonic() - started) * 1000)
             warnings = list(payload.pop("_warnings", []))
             snapshot_id = self.db.save_snapshot(self.cluster, collected_at, payload, duration_ms, warnings)
-            return {"ok": True, "snapshot_id": snapshot_id, "duration_ms": duration_ms, "warnings": warnings}
+            cleanup: dict[str, Any]
+            try:
+                cleanup = self.db.cleanup(
+                    self.cluster,
+                    retention_days=self.retention_days,
+                    max_size_mb=self.max_db_size_mb,
+                )
+            except Exception as cleanup_error:  # cleanup must not hide a healthy collection
+                cleanup = {"deleted_snapshots": 0, "error": str(cleanup_error)}
+            return {
+                "ok": True,
+                "snapshot_id": snapshot_id,
+                "duration_ms": duration_ms,
+                "warnings": warnings,
+                "cleanup": cleanup,
+            }
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
             self.db.save_failure(self.cluster, collected_at, str(exc), duration_ms)

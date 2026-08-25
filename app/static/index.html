@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.10">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.18">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.18">
 </head>
 <body>
   <aside class="sidebar">
@@ -20,7 +20,7 @@
           <circle class="logo-node" cx="39" cy="20" r="3" />
         </svg>
       </span>
-      <div><b>Ncc CAD Flow</b><small>EDA Compute Insight</small></div>
+      <div class="brand-copy"><b>Ncc CAD Flow</b><small>EDA Compute Insight</small></div>
     </div>
     <nav>
       <button class="nav active" data-view="overview"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>总览</button>
@@ -32,7 +32,7 @@
       <button class="nav" data-view="config"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg></span>配置</button>
     </nav>
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small><small id="healthDetail">正在读取最近一次采集结果</small></div></div>
-    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.10</span></div>
+    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.18</span></div>
   </aside>
   <main>
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><div class="header-actions"><button id="themeToggle" type="button" aria-pressed="false" title="切换到深色模式">深色模式</button><button id="refreshBtn">刷新数据</button></div></header>
@@ -113,6 +113,15 @@
           </div>
         </section>
 
+        <section class="config-section retention-section">
+          <div class="section-heading"><div class="section-icon">DB</div><div><h3>数据保留与清理</h3><p>限制 SQLite 快照历史，避免运行时间过长后数据库无限增长。</p></div></div>
+          <div class="form-grid schedule-grid">
+            <label>保留天数<input name="db_retention_days" type="number" min="0"><small>按采集时间清理旧快照；0 表示关闭按天清理。</small></label>
+            <label>最大数据库大小（MB）<input name="db_max_size_mb" type="number" min="0"><small>超过后删除最旧快照；0 表示关闭按大小清理。</small></label>
+          </div>
+          <small class="retention-note">两项策略同时生效；每次采集后执行。清理仅删除快照及其关联明细，不影响 LSF/FlexNet 配置。默认 7 天、1024 MB。</small>
+        </section>
+
         <footer class="config-actions"><div class="config-action-group"><button type="submit">保存配置并预检 LSF</button><button id="updateBtn" class="secondary-button" type="button">更新代码并重启</button><small id="configMessage" aria-live="polite">未保存的修改不会应用到采集器。</small></div><p>更新会执行快进拉取并短暂重启服务；FlexNet 配置在下次采集时读取。</p></footer>
       </form>
     </section>
@@ -126,6 +135,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=0.3.18"></script>
+  <script src="/static/pending-jobs.js?v=0.3.18"></script>
+  <script src="/static/table-sorting.js?v=0.3.18"></script>
 </body>
 </html>

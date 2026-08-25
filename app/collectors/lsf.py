@@ -321,7 +321,9 @@ class LsfCollector(Collector):
         # PEND row, and merge by Job ID so a job is never shown twice.
         if not any(row["status"].upper() == "PEND" for row in parsed_rows):
             try:
-                pending_output = self.runner.run(["bjobs", "-p0", "-u", "all", *format_args])
+                # Use the portable ``-p`` form.  Some LSF 10.x clients accept
+                # ``-p0`` as a different option and silently omit pending jobs.
+                pending_output = self.runner.run(["bjobs", "-p", "-u", "all", *format_args])
                 parsed_rows.extend(parse_output(pending_output))
             except (CommandError, ParseError):
                 pass

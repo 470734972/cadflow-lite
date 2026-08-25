@@ -21,15 +21,22 @@ import app.main as main_module
 
 def test_health_and_summary():
     with TestClient(app) as client:
-        assert client.get("/api/health").status_code == 200
+        health = client.get("/api/health")
+        assert health.status_code == 200
+        assert health.json()["version"] == "0.3.18"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
-        assert client.get("/api/config").json()["mode"] == "demo"
+        config = client.get("/api/config").json()
+        assert config["mode"] == "demo"
+        assert config["db_retention_days"] == 7
+        assert config["db_max_size_mb"] == 1024
         summary = client.get("/api/summary").json()
         assert summary["cluster"] == "demo-cluster"
         assert "memory_waste_jobs" not in summary["totals"]
         jobs = client.get("/api/jobs").json()
         assert jobs
+        assert len(client.get("/api/jobs?limit=1").json()) == 1
+        assert client.get("/api/jobs?limit=1001").status_code == 422
         assert not {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"} & jobs[0].keys()
         assert summary["totals"]["hosts"] == 8
         queues = client.get("/api/queues").json()

@@ -45,6 +45,10 @@ fail() {
   exit 1
 }
 
+project_version() {
+  sed -n 's/^version = "\([^"]*\)"/\1/p' "$APP_DIR/pyproject.toml" | head -n 1
+}
+
 normalize_config_password_hash() {
   [[ -f "$ENV_FILE" ]] || return 0
   local raw_hash tmp_file
@@ -215,9 +219,15 @@ if [[ $SKIP_DEPS -eq 0 ]]; then
     if ! venv_has_sqlite "$VENV_PYTHON"; then
       OFFLINE_REQUIREMENTS+=("pysqlite3-binary>=0.5,<1")
     fi
-    "$VENV_PYTHON" -m pip install --no-index --find-links="$WHEELHOUSE" \
-      "${OFFLINE_REQUIREMENTS[@]}" || \
+    PIP_LOG=$(mktemp "${TMPDIR:-/tmp}/cadflow-pip.XXXXXX")
+    if ! "$VENV_PYTHON" -m pip install --no-index --find-links="$WHEELHOUSE" \
+      "${OFFLINE_REQUIREMENTS[@]}" >"$PIP_LOG" 2>&1; then
+      cat "$PIP_LOG" >&2
+      rm -f "$PIP_LOG"
       fail "offline dependency installation failed; check wheelhouse and Python ABI"
+    fi
+    rm -f "$PIP_LOG"
+    echo "Dependencies: ready (offline wheelhouse)"
   elif "$VENV_PYTHON" -c 'import fastapi, uvicorn' >/dev/null 2>&1; then
     echo "wheelhouse not found; existing FastAPI/Uvicorn installation will be used"
   else
@@ -245,6 +255,8 @@ CADFLOW_DB_PATH=./data/cadflow.db
 CADFLOW_BIND_HOST=$HOST
 CADFLOW_PORT=$PORT
 CADFLOW_ADMIN_TOKEN=$ADMIN_TOKEN
+CADFLOW_DB_RETENTION_DAYS=7
+CADFLOW_DB_MAX_SIZE_MB=1024
 EOF
   echo "Created configuration: $ENV_FILE"
 fi
@@ -308,6 +320,13 @@ wait_health() {
   return 1
 }
 
+running_version() {
+  local url="http://127.0.0.1:${CADFLOW_PORT:-$PORT}/api/health" body
+  body=$(curl --fail --silent "$url" 2>/dev/null || true)
+  [[ -n "$body" ]] || { printf '%s\n' "unknown"; return 0; }
+  printf '%s' "$body" | "$VENV_PYTHON" -c 'import json, sys; print(json.load(sys.stdin).get("version", "unknown"))' 2>/dev/null || printf '%s\n' "unknown"
+}
+
 show_generated_config_password() {
   if [[ -n "$CONFIG_PASSWORD_GENERATED" ]]; then
     echo "配置管理口令（请立即保存）：$CONFIG_PASSWORD_GENERATED"
@@ -319,6 +338,7 @@ if [[ -n "$OLD_PID" ]]; then
   if [[ $FORCE_RESTART -eq 0 ]]; then
     if wait_health; then
       echo "CADFlow is already running: PID=$OLD_PID"
+      echo "Version: v$(project_version) (API v$(running_version))"
       echo "Open: http://$(hostname -I 2>/dev/null | awk '{print $1}'):${CADFLOW_PORT:-$PORT}"
       show_generated_config_password
       exit 0
@@ -337,6 +357,8 @@ printf '%s\n' "$NEW_PID" > "$PID_FILE"
 if wait_health; then
   SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   echo "CADFlow deployed successfully"
+  echo "Version: v$(project_version) (API v$(running_version))"
+  echo "Commit: $(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "PID: $NEW_PID"
   echo "Open: http://${SERVER_IP:-127.0.0.1}:${CADFLOW_PORT:-$PORT}"
   echo "Config: $ENV_FILE"

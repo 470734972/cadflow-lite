@@ -23,6 +23,8 @@ class Settings:
     collect_interval_seconds: int = _int_env("CADFLOW_COLLECT_INTERVAL_SECONDS", 60)
     command_timeout_seconds: int = _int_env("CADFLOW_COMMAND_TIMEOUT_SECONDS", 20)
     stale_after_seconds: int = _int_env("CADFLOW_STALE_AFTER_SECONDS", 0)
+    db_retention_days: int = _int_env("CADFLOW_DB_RETENTION_DAYS", 7)
+    db_max_size_mb: int = _int_env("CADFLOW_DB_MAX_SIZE_MB", 1024)
     lsf_bin_dir: str = os.getenv("CADFLOW_LSF_BIN_DIR", "")
     # The executable location is site-specific and is entered in the Web
     # configuration page when LSF mode is enabled.
@@ -41,6 +43,10 @@ class Settings:
             raise ValueError("collection interval must be at least 15 seconds")
         if self.command_timeout_seconds < 1:
             raise ValueError("command timeout must be at least 1 second")
+        if self.db_retention_days < 0:
+            raise ValueError("database retention days must be zero or greater")
+        if self.db_max_size_mb < 0:
+            raise ValueError("database maximum size must be zero or greater")
         if self.mode == "lsf" and not self.lsf_bin_dir:
             raise ValueError("CADFLOW_LSF_BIN_DIR is required in lsf mode")
 
@@ -59,6 +65,8 @@ class RuntimeConfig:
     collect_interval_seconds: int
     command_timeout_seconds: int
     stale_after_seconds: int
+    db_retention_days: int
+    db_max_size_mb: int
     lsf_bin_dir: str
     lmstat_path: str
     license_servers: tuple[str, ...]
@@ -68,8 +76,8 @@ class RuntimeConfig:
     @classmethod
     def from_settings(cls, source: Settings) -> "RuntimeConfig":
         return cls(source.mode, source.cluster_name, source.collect_interval_seconds, source.command_timeout_seconds,
-                   source.stale_after_seconds, source.lsf_bin_dir, source.lmstat_path, source.license_servers,
-                   source.license_vendor, {})
+                   source.stale_after_seconds, source.db_retention_days, source.db_max_size_mb,
+                   source.lsf_bin_dir, source.lmstat_path, source.license_servers, source.license_vendor, {})
 
     @classmethod
     def from_dict(cls, data: dict) -> "RuntimeConfig":
@@ -89,7 +97,8 @@ class RuntimeConfig:
         config = cls(
             str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "demo-cluster")).strip(),
             int(data.get("collect_interval_seconds", 300)), int(data.get("command_timeout_seconds", 45)),
-            int(data.get("stale_after_seconds", 0)), str(data.get("lsf_bin_dir", "")).strip(),
+            int(data.get("stale_after_seconds", 0)), int(data.get("db_retention_days", 7)),
+            int(data.get("db_max_size_mb", 1024)), str(data.get("lsf_bin_dir", "")).strip(),
             str(data.get("lmstat_path", "")).strip(), tuple(servers), ",".join(vendors), allowed,
         )
         config.validate()
@@ -104,6 +113,10 @@ class RuntimeConfig:
             raise ValueError("collection interval must be at least 15 seconds")
         if self.command_timeout_seconds < 1:
             raise ValueError("command timeout must be at least 1 second")
+        if self.db_retention_days < 0:
+            raise ValueError("database retention days must be zero or greater")
+        if self.db_max_size_mb < 0:
+            raise ValueError("database maximum size must be zero or greater")
         if self.mode == "lsf" and not self.lsf_bin_dir:
             raise ValueError("lsf_bin_dir is required in lsf mode")
 

@@ -11,6 +11,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - depends on the host Pyt
             "Python has no sqlite3 support; install pysqlite3-binary in the offline environment"
         ) from exc
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -176,10 +177,6 @@ class Database:
             self._insert_many(conn, "queues", snapshot_id, payload.get("queues", []))
             self._insert_many(conn, "hosts", snapshot_id, payload.get("hosts", []))
             self._insert_many(conn, "licenses", snapshot_id, payload.get("licenses", []))
-            conn.execute(
-                "DELETE FROM snapshots WHERE cluster=? AND id NOT IN (SELECT id FROM snapshots WHERE cluster=? ORDER BY id DESC LIMIT 2016)",
-                (cluster, cluster),
-            )
             return snapshot_id
 
     def save_failure(self, cluster: str, collected_at: str, error: str, duration_ms: int = 0) -> None:
@@ -188,6 +185,96 @@ class Database:
                 "INSERT INTO snapshots(cluster, collected_at, status, duration_ms, error) VALUES (?, ?, 'error', ?, ?)",
                 (cluster, collected_at, duration_ms, error[:1000]),
             )
+
+    def cleanup(
+        self,
+        cluster: str,
+        retention_days: int = 7,
+        max_size_mb: int = 1024,
+        now: Optional[datetime] = None,
+    ) -> dict[str, int]:
+        """Apply the configured retention policy without touching system files.
+
+        ``0`` disables an individual limit. Age cleanup keeps the latest
+        snapshot for the cluster. Size cleanup keeps the latest snapshot for
+        every cluster so a very small limit cannot make the dashboard empty.
+        SQLite pages are vacuumed only after the size limit is exceeded; age
+        cleanup otherwise checkpoints WAL and lets SQLite reuse freed pages.
+        """
+        if retention_days < 0 or max_size_mb < 0:
+            raise ValueError("cleanup limits must be zero or greater")
+        now = now or datetime.now(timezone.utc)
+        cutoff = (now - timedelta(days=retention_days)).isoformat() if retention_days else None
+        max_size_bytes = max_size_mb * 1024 * 1024 if max_size_mb else 0
+        deleted = 0
+
+        with self._lock:
+            conn = self.connect()
+            try:
+                latest_cluster = conn.execute(
+                    "SELECT id FROM snapshots WHERE cluster=? ORDER BY id DESC LIMIT 1", (cluster,)
+                ).fetchone()
+                latest_cluster_id = int(latest_cluster["id"]) if latest_cluster else 0
+                if cutoff and latest_cluster_id:
+                    cursor = conn.execute(
+                        "DELETE FROM snapshots WHERE cluster=? AND id<>? AND collected_at < ?",
+                        (cluster, latest_cluster_id, cutoff),
+                    )
+                    deleted += max(0, int(cursor.rowcount))
+                conn.commit()
+
+                if deleted:
+                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                    conn.commit()
+
+                size_bytes = self._database_size_bytes()
+                if max_size_bytes and size_bytes > max_size_bytes:
+                    # Delete in batches, then VACUUM once per batch so the
+                    # physical file size (not just logical free pages) falls.
+                    while size_bytes > max_size_bytes:
+                        latest_ids = [
+                            int(row["id"])
+                            for row in conn.execute(
+                                "SELECT MAX(id) AS id FROM snapshots GROUP BY cluster"
+                            ).fetchall()
+                        ]
+                        if not latest_ids:
+                            break
+                        placeholders = ",".join("?" for _ in latest_ids)
+                        cursor = conn.execute(
+                            f"DELETE FROM snapshots WHERE id NOT IN ({placeholders}) "
+                            "AND id IN (SELECT id FROM snapshots ORDER BY id ASC LIMIT 128)",
+                            latest_ids,
+                        )
+                        batch_deleted = max(0, int(cursor.rowcount))
+                        if not batch_deleted:
+                            break
+                        deleted += batch_deleted
+                        conn.commit()
+                        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        conn.commit()
+                        conn.execute("VACUUM")
+                        size_bytes = self._database_size_bytes()
+                else:
+                    size_bytes = self._database_size_bytes()
+                return {
+                    "deleted_snapshots": deleted,
+                    "size_bytes": size_bytes,
+                    "retention_days": retention_days,
+                    "max_size_mb": max_size_mb,
+                }
+            finally:
+                conn.close()
+
+    def _database_size_bytes(self) -> int:
+        """Return the SQLite main file plus WAL/SHM sidecars."""
+        total = 0
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                total += (Path(f"{self.path}{suffix}")).stat().st_size
+            except FileNotFoundError:
+                pass
+        return total
 
     def load_config(self, key: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:
