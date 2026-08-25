@@ -144,6 +144,10 @@ cd "$APP_DIR"
 exec 9>"$LOCK_FILE"
 flock -n 9 || fail "another CADFlow install/start operation is running"
 
+if [[ -x "$VENV_DIR/bin/python" ]] && ! python_supported "$VENV_DIR/bin/python"; then
+  fail "existing $VENV_DIR lacks Python sqlite3 support; move it aside (for example: mv $VENV_DIR ${VENV_DIR}.old) and rerun"
+fi
+
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
   echo "Creating virtual environment: $VENV_DIR"
   VENV_ARGS=()
@@ -157,7 +161,7 @@ if [[ ! -x "$VENV_DIR/bin/python" ]]; then
 fi
 VENV_PYTHON=$VENV_DIR/bin/python
 
-"$VENV_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || \
+"$VENV_PYTHON" -c 'import sys, sqlite3; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || \
   fail "the virtual environment must use Python 3.9+ with sqlite3"
 
 if [[ $SKIP_DEPS -eq 0 ]]; then
