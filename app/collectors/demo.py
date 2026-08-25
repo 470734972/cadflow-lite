@@ -31,6 +31,7 @@ class DemoCollector(Collector):
                 "mem_pct": 0 if status != "ok" else round(rng.uniform(48, 91), 1),
                 "load_1m": 0 if status != "ok" else round(rng.uniform(12, 62), 2),
                 "load_15m": 0 if status != "ok" else round(rng.uniform(18, 68), 2),
+                "total_mem_mb": 0 if status != "ok" else 262144,
                 "free_mem_mb": 0 if status != "ok" else round(rng.uniform(8192, 131072)),
                 "free_tmp_mb": 0 if status != "ok" else round(rng.uniform(10240, 204800)),
                 "free_swap_mb": 0 if status != "ok" else round(rng.uniform(4096, 65536)),

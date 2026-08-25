@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -17,7 +18,7 @@ try:
 except ValueError:
     SESSION_TTL_SECONDS = DEFAULT_SESSION_TTL_SECONDS
 SESSION_COOKIE = "cadflow_config_session"
-_sessions: dict[str, float] = {}
+_revoked_sessions: set[str] = set()
 _sessions_lock = threading.Lock()
 
 
@@ -27,6 +28,14 @@ def _encode(value: bytes) -> str:
 
 def _decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _session_key() -> bytes:
+    """Derive a stable signing key without storing the clear-text password."""
+    configured = os.getenv("CADFLOW_CONFIG_SESSION_SECRET", "")
+    password_hash = os.getenv("CADFLOW_CONFIG_PASSWORD_HASH", "")
+    material = configured or password_hash
+    return hashlib.sha256(("cadflow-config-session:" + material).encode("utf-8")).digest()
 
 
 def hash_password(password: str) -> str:
@@ -50,28 +59,33 @@ def verify_password(password: str, encoded: str) -> bool:
 
 
 def create_session() -> str:
-    token = secrets.token_urlsafe(32)
-    now = time.time()
-    with _sessions_lock:
-        _sessions[token] = now + SESSION_TTL_SECONDS
-    return token
+    expires_at = int(time.time()) + SESSION_TTL_SECONDS
+    payload = f"{expires_at}.{secrets.token_urlsafe(24)}".encode("utf-8")
+    signature = hmac.new(_session_key(), payload, hashlib.sha256).digest()
+    return f"{_encode(payload)}.{_encode(signature)}"
 
 
 def valid_session(token: str) -> bool:
     if not token:
         return False
-    now = time.time()
     with _sessions_lock:
-        expires_at = _sessions.get(token)
-        if expires_at is None:
+        if token in _revoked_sessions:
             return False
-        if expires_at <= now:
-            _sessions.pop(token, None)
-            return False
-        return True
+    try:
+        payload_text, signature_text = token.split(".", 1)
+        payload = _decode(payload_text)
+        signature = _decode(signature_text)
+        expires_text, nonce = payload.decode("utf-8").split(".", 1)
+        expires_at = int(expires_text)
+    except (binascii.Error, ValueError, TypeError, UnicodeDecodeError):
+        return False
+    if not nonce or expires_at <= int(time.time()):
+        return False
+    expected = hmac.new(_session_key(), payload, hashlib.sha256).digest()
+    return hmac.compare_digest(signature, expected)
 
 
 def revoke_session(token: str) -> None:
     if token:
         with _sessions_lock:
-            _sessions.pop(token, None)
+            _revoked_sessions.add(token)

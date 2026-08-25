@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     running_slots INTEGER NOT NULL DEFAULT 0,
     cpu_pct REAL NOT NULL DEFAULT 0,
     mem_pct REAL NOT NULL DEFAULT 0,
+    total_mem_mb REAL NOT NULL DEFAULT 0,
     load_1m REAL NOT NULL DEFAULT 0,
     load_15m REAL NOT NULL DEFAULT 0,
     free_mem_mb REAL NOT NULL DEFAULT 0,
@@ -137,6 +138,7 @@ class Database:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(hosts)")}
         migrations = {
             "load_1m": "REAL NOT NULL DEFAULT 0",
+            "total_mem_mb": "REAL NOT NULL DEFAULT 0",
             "free_mem_mb": "REAL NOT NULL DEFAULT 0",
             "free_tmp_mb": "REAL NOT NULL DEFAULT 0",
             "free_swap_mb": "REAL NOT NULL DEFAULT 0",

@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lsload, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lshost, parse_lsload, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -42,6 +42,14 @@ def test_duration_and_lsload_parsing():
         "compute01 ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n"
     )
     assert loads == {"compute01": {"cpu_pct": 72, "load_1m": 0.2, "load_15m": 0.3, "free_mem_mb": 131072, "free_tmp_mb": 0, "free_swap_mb": 65536}}
+
+
+def test_parse_lshost_total_memory():
+    capacities = parse_lshost(
+        "HOST_NAME type model cpuf ncpus maxmem maxswp maxtmp rexpri server RESOURCES\n"
+        "compute01 X86_64 model 2.0 64 256G 128G 100G 0 1 -\n"
+    )
+    assert capacities == {"compute01": {"total_mem_mb": 262144}}
 
 
 def test_parse_lmstat():

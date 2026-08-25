@@ -46,7 +46,12 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     queue_max_slots = sum(queue["max_slots"] for queue in queues)
     host_running_slots = sum(host["running_slots"] for host in hosts)
     host_max_slots = sum(host["max_slots"] for host in hosts)
+    total_mem_mb = sum(max(0, float(host.get("total_mem_mb", 0) or 0)) for host in hosts)
     free_mem_mb = sum(max(0, float(host.get("free_mem_mb", 0) or 0)) for host in hosts)
+    memory_pct = round(max(0, min(100, (total_mem_mb - free_mem_mb) / total_mem_mb * 100)), 1) if total_mem_mb else (
+        round(sum(host["mem_pct"] for host in hosts if host["mem_pct"] >= 0) / len([host for host in hosts if host["mem_pct"] >= 0]), 1)
+        if any(host["mem_pct"] >= 0 for host in hosts) else None
+    )
     # An LSF queue MAX of "-" means unlimited and is stored as zero. In that
     # case, hosts are the authoritative physical capacity for the dashboard.
     running_slots = queue_running_slots if queues else host_running_slots
@@ -61,13 +66,14 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
             "hosts": len(hosts), "unavailable_hosts": sum(1 for host in hosts if host["status"].lower() not in {"ok", "closed_full"}),
             "running_slots": running_slots,
             "max_slots": max_slots,
+            "total_mem_mb": round(total_mem_mb, 1),
             "free_mem_mb": round(free_mem_mb, 1),
             "memory_waste_jobs": len(waste_jobs),
             "license_risks": sum(1 for item in licenses if item["status"] in {"warning", "critical"}),
         },
         "efficiency": {
             "cpu_pct": round(sum(host["cpu_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
-            "mem_pct": round(sum(host["mem_pct"] for host in hosts if host["mem_pct"] >= 0) / len([host for host in hosts if host["mem_pct"] >= 0]), 1) if any(host["mem_pct"] >= 0 for host in hosts) else None,
+            "mem_pct": memory_pct,
             "slot_pct": round(running_slots / max(1, max_slots) * 100, 1),
         },
     }

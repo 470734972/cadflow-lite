@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CADFlow Lite</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.0">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.1">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -32,14 +32,14 @@
       <button class="nav" data-view="config"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg></span>配置</button>
     </nav>
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small><small id="healthDetail">正在读取最近一次采集结果</small></div></div>
-    <div class="version-info" aria-label="CADFlow Lite 版本">CADFlow Lite <span>v0.3.0</span></div>
+    <div class="version-info" aria-label="CADFlow Lite 版本">CADFlow Lite <span>v0.3.1</span></div>
   </aside>
   <main>
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><div class="header-actions"><button id="themeToggle" type="button" aria-pressed="false" title="切换到深色模式">深色模式</button><button id="refreshBtn">刷新数据</button></div></header>
 
     <section id="overview" class="view active">
       <article class="panel sla-panel">
-        <div class="panel-title sla-heading"><div><span class="eyebrow">AVAILABILITY OBSERVATION</span><h2>核心功能 SLA</h2><small>基于近 24 小时 CADFlow 采集快照；不代表 LSF 或 License Server 的网络连通性探测。</small></div><div class="sla-window"><strong id="slaCoverage">—</strong><small id="slaCoverageDetail">等待采集样本</small></div></div>
+        <div class="panel-title sla-heading"><div class="sla-heading-copy"><div class="sla-title-row"><span class="eyebrow">AVAILABILITY OBSERVATION</span><h2>核心功能 SLA</h2></div><p>基于近 24 小时 CADFlow 采集快照；不代表 LSF 或 License Server 的网络连通性探测。</p></div><div class="sla-window"><strong id="slaCoverage">—</strong><small id="slaCoverageDetail">等待采集样本</small></div></div>
         <div id="slaCards" class="sla-grid"></div>
         <div class="sla-footer"><span>最近 24 次采集</span><div id="slaTimeline" class="sla-timeline" aria-label="最近采集状态"></div><small id="slaFailures">无失败样本</small></div>
       </article>
@@ -48,13 +48,31 @@
         <article class="panel"><div class="panel-title"><h2>资源利用率</h2><span>Latest</span></div><div id="gauges" class="gauges"></div></article>
         <article class="panel"><div class="panel-title"><h2>活动告警</h2><span id="alertCount">0</span></div><div id="alerts" class="alert-list"></div></article>
       </div>
-      <article class="panel"><div class="panel-title"><h2>队列负载趋势</h2><span>最近 8 次采集</span></div><canvas id="historyChart" height="230"></canvas></article>
+      <article class="panel"><div class="panel-title history-heading"><div><h2>队列作业趋势</h2><small class="history-subtitle">运行中与等待中的作业数量，按采集时间展示</small></div><div class="history-legend" aria-label="图例"><span><i class="legend-dot running"></i>运行中 RUN</span><span><i class="legend-dot pending"></i>等待中 PEND</span><em>最近 8 次采集</em></div></div><div class="history-chart-wrap"><canvas id="historyChart" height="230" role="img" aria-label="队列运行中和等待中作业数量趋势"></canvas><div id="historyEmpty" class="history-empty" hidden>暂无历史采集数据</div></div></article>
     </section>
 
-    <section id="jobs" class="view"><article class="panel"><div class="panel-title"><h2>最近作业</h2><div class="job-filters"><input id="jobUser" type="search" placeholder="按用户名过滤" autocomplete="off"><select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></div></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>作业名称</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>提交节点</th><th>执行节点</th><th>提交时间</th><th>Slots</th><th>内存效率</th><th>CPU 效率</th></tr></thead><tbody id="jobRows"></tbody></table></div></article></section>
-    <section id="users" class="view"><article class="panel"><div class="panel-title"><div><h2>用户资源使用</h2><span>按当前采集快照聚合 LSF 作业</span></div><span id="userCount">0 位用户</span></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>运行作业</th><th>等待作业</th><th>异常退出</th><th>运行 Slots</th><th>全部 Slots</th><th>CPU 效率</th></tr></thead><tbody id="userRows"></tbody></table></div></article></section>
-    <section id="queues" class="view"><div id="queueCards" class="card-grid"></div></section>
-    <section id="hosts" class="view"><div id="hostCards" class="card-grid"></div></section>
+    <section id="jobs" class="view"><article class="panel"><div class="table-controls-heading"><div><h2>最近作业</h2><small>按作业、用户、队列和节点筛选当前采集快照。</small></div><strong id="jobResultCount">0 / 0 个作业</strong></div><div class="table-filter-grid job-filter-grid"><label>关键字<input id="jobSearch" type="search" placeholder="作业名、用户或项目" autocomplete="off"></label><label>状态<select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></label><label>队列<input id="jobQueue" type="search" placeholder="队列名称" autocomplete="off"></label><label>节点<input id="jobNode" type="search" placeholder="提交或执行节点" autocomplete="off"></label><label>排序<select id="jobSort"><option value="submit_time">提交时间（新到旧）</option><option value="job_id">Job ID（大到小）</option><option value="slots">Slots（多到少）</option><option value="cpu">CPU 效率（高到低）</option><option value="memory">内存效率（高到低）</option></select></label><button id="jobReset" class="secondary-button" type="button">重置筛选</button></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>作业名称</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>提交节点</th><th>执行节点</th><th>提交时间</th><th>Slots</th><th>内存效率</th><th>CPU 效率</th></tr></thead><tbody id="jobRows"></tbody></table></div></article></section>
+    <section id="users" class="view"><article class="panel"><div class="table-controls-heading"><div><h2>用户资源使用</h2><small>按当前采集快照聚合 LSF 作业。</small></div><strong id="userResultCount">0 / 0 位用户</strong></div><div class="table-filter-grid user-filter-grid"><label>用户名<input id="userSearch" type="search" placeholder="输入用户名" autocomplete="off"></label><label>当前活动<select id="userActivityFilter"><option value="">全部用户</option><option value="running">有运行作业</option><option value="pending">有等待作业</option><option value="exit">有异常退出</option><option value="idle">当前空闲</option></select></label><label>排序<select id="userSort"><option value="user">用户名</option><option value="running_jobs">运行作业最多</option><option value="pending_jobs">等待作业最多</option><option value="exit_jobs">异常退出最多</option><option value="running_slots">运行 Slots 最多</option><option value="cpu_efficiency_pct">CPU 效率最高</option></select></label><button id="userReset" class="secondary-button" type="button">重置筛选</button></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>运行作业</th><th>等待作业</th><th>异常退出</th><th>运行 Slots</th><th>全部 Slots</th><th>CPU 效率</th></tr></thead><tbody id="userRows"></tbody></table></div></article></section>
+    <section id="queues" class="view">
+      <article class="panel queue-dashboard">
+        <div class="queue-dashboard-heading"><div><h2>队列运行总览</h2><small>将所有队列的状态、作业量和并发上限集中展示，便于快速判断拥塞位置。</small></div><strong id="queueResultCount">0 / 0 个队列</strong></div>
+        <div id="queueSummary" class="queue-summary-grid"></div>
+        <div class="queue-dashboard-divider"></div>
+        <div class="queue-controls-heading"><div><h3>筛选与排序</h3><small>筛选只影响下方表格，不会改变采集数据。</small></div></div>
+        <div class="queue-filter-grid"><label>队列名称<input id="queueSearch" type="search" placeholder="输入队列名称" autocomplete="off"></label><label>开放状态<select id="queueStatusFilter"><option value="">全部状态</option><option value="open">开放队列</option><option value="inactive">窗口未开启</option><option value="closed">已关闭</option></select></label><label>当前负载<select id="queueLoadFilter"><option value="">全部负载</option><option value="running">有运行作业</option><option value="pending">有等待作业</option><option value="suspended">有挂起作业</option><option value="idle">空闲队列</option></select></label><label>排序<select id="queueSort"><option value="name">名称</option><option value="running">运行作业最多</option><option value="pending">等待作业最多</option><option value="suspended">挂起作业最多</option><option value="utilization">并发利用率最高</option></select></label><button id="queueReset" class="secondary-button" type="button">重置筛选</button></div>
+      </article>
+      <article class="panel queue-table-panel"><div class="queue-table-heading"><div><h2>队列明细</h2><small>运行 / 并发上限；“不限”表示 LSF 未设置队列最大并发作业数。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="queue-table"><thead><tr><th>队列</th><th>状态</th><th>运行 / 并发上限</th><th>等待</th><th>挂起</th><th>并发利用率</th><th>负载提示</th></tr></thead><tbody id="queueRows"></tbody></table></div></article>
+    </section>
+    <section id="hosts" class="view">
+      <article class="panel host-dashboard">
+        <div class="host-dashboard-heading"><div><h2>节点资源总览</h2><small>集中查看 LSF 节点状态、Slots、CPU、负载、内存和临时目录可用空间。</small></div><strong id="hostResultCount">0 / 0 个节点</strong></div>
+        <div id="hostSummary" class="host-summary-grid"></div>
+        <div class="queue-dashboard-divider"></div>
+        <div class="queue-controls-heading"><div><h3>筛选与排序</h3><small>状态和资源指标均来自最近一次 LSF 采集。</small></div></div>
+        <div class="table-filter-grid host-filter-grid"><label>节点名称<input id="hostSearch" type="search" placeholder="输入节点名称" autocomplete="off"></label><label>节点状态<select id="hostStatusFilter"><option value="">全部状态</option><option value="healthy">正常</option><option value="closed">已关闭</option><option value="unavailable">不可用或不可达</option></select></label><label>当前活动<select id="hostActivityFilter"><option value="">全部节点</option><option value="running">有运行 Slots</option><option value="high_cpu">CPU ≥ 70%</option><option value="high_load">1 分钟负载较高</option></select></label><label>排序<select id="hostSort"><option value="name">节点名称</option><option value="cpu">CPU 使用率最高</option><option value="load">1 分钟负载最高</option><option value="memory">可用内存最少</option><option value="tmp">/tmp 可用最少</option><option value="running_slots">运行 Slots 最多</option></select></label><button id="hostReset" class="secondary-button" type="button">重置筛选</button></div>
+      </article>
+      <article class="panel host-table-panel"><div class="queue-table-heading"><div><h2>节点明细</h2><small>可用内存、/tmp 和 Swap 均为节点当前可用容量。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="host-table"><thead><tr><th>节点</th><th>状态</th><th>运行 / Slots</th><th>CPU</th><th>负载（1m / 15m）</th><th>可用内存</th><th>/tmp 可用</th><th>Swap 可用</th></tr></thead><tbody id="hostRows"></tbody></table></div></article>
+    </section>
     <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License 容量</h2><div class="license-filters"><input id="licenseSearch" type="search" placeholder="功能名、Vendor 或服务器" autocomplete="off"><select id="licenseStatus"><option value="">全部 License</option><option value="floating">浮动许可</option><option value="node_locked">节点锁定</option><option value="risk">风险许可</option></select></div></div><div id="licenseRows" class="license-list"></div></article></section>
 
     <section id="config" class="view">

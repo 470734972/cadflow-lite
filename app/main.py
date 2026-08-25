@@ -170,6 +170,7 @@ def authenticate_config(payload: dict[str, Any], response: Response) -> dict[str
         create_session(),
         max_age=SESSION_TTL_SECONDS,
         httponly=True,
+        path="/",
         samesite="lax",
     )
     return {"ok": True, "expires_in_seconds": SESSION_TTL_SECONDS}

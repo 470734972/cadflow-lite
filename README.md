@@ -1,6 +1,6 @@
 # CADFlow Lite
 
-当前版本：`v0.3.0`
+当前版本：`v0.3.1`
 
 CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在支持 Bash、Python 和可选 systemd 的 Linux 主机上部署，也可由普通账户在 LSF 登录节点手动运行。
 
@@ -130,7 +130,7 @@ bash deploy/install-user.sh --python python3.12
 
 脚本会检测该 Python 是否已有 FastAPI/Uvicorn：如果已有，就创建使用系统包的 `.venv`，不下载、不安装；如果没有，或 Python 缺少 `sqlite3`，则从 `wheelhouse/` 离线安装（缺少 SQLite 时自动加入 `pysqlite3-binary`）。随后生成通用 `.cadflow.env`、启动 8080 并验证健康检查。它不会写入 LSF/FlexNet 路径；首次打开页面后，在“配置”菜单填写现场路径并保存即可。如果 `python3.12` 已在 PATH 中，上面就是 RHEL 8.10 的完整一键部署命令。也可以指定任意项目目录、Python 和端口：
 
-首次部署会生成一次“配置管理口令”，脚本只在终端显示一次；配置口令以 PBKDF2 哈希保存到 `.cadflow.env`。普通用户仍可查看总览、作业、节点和 License，但打开“配置”菜单或调用配置 API 必须先验证口令。验证会话默认在当前服务实例内保持 7 天，退出配置会话后立即失效；可通过 `CADFLOW_CONFIG_SESSION_TTL_SECONDS` 缩短时长。升级或重启不会改变已有口令。
+首次部署会生成一次“配置管理口令”，脚本只在终端显示一次；配置口令以 PBKDF2 哈希保存到 `.cadflow.env`。普通用户仍可查看总览、作业、节点和 License，但打开“配置”菜单或调用配置 API 必须先验证口令。验证会话通过 HttpOnly 签名 Cookie 默认保持 7 天，页面刷新、服务重启或多进程运行不会要求重复输入；退出配置会话后浏览器 Cookie 立即删除，口令哈希变更后旧会话自动失效。可通过 `CADFLOW_CONFIG_SESSION_TTL_SECONDS` 缩短时长。
 
 ```bash
 bash deploy/install-user.sh \
