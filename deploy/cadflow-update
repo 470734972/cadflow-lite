@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UPGRADE_SCRIPT=/opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
+UPGRADE_SCRIPT=/opt/cadflow-lite/current/deploy/upgrade-linux.sh
 
 [[ -f "$UPGRADE_SCRIPT" ]] || {
   echo "CADFlow is not installed at /opt/cadflow-lite/current" >&2

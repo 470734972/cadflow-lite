@@ -6,3 +6,10 @@ __pycache__/
 .env
 data/*.db
 data/*.db-*
+backups/
+logs/
+cadflow.pid
+.cadflow.env
+.cadflow-install.lock
+.cadflow-update.lock
+wheelhouse/

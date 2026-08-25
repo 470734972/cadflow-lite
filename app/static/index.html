@@ -45,7 +45,7 @@
 
     <section id="config" class="view">
       <div class="config-intro">
-        <div><span class="eyebrow">DATA SOURCE SETUP</span><h2>采集源配置</h2><p>LSF 作业调度与 FlexNet License 采集独立管理；保存后会执行 LSF 预检。</p></div>
+        <div><span class="eyebrow">DATA SOURCE SETUP</span><h2>采集源配置</h2><p>LSF 作业调度与 FlexNet License 采集独立管理；现场路径只保存在当前实例配置库，保存后会执行 LSF 预检。</p></div>
         <span class="config-state">配置实时生效</span>
       </div>
       <form id="configForm" class="config-form">
@@ -60,13 +60,13 @@
         <div class="collector-grid">
           <section class="config-section collector-section lsf-section">
             <div class="section-heading"><div class="section-icon">LSF</div><div><h3>LSF 调度器</h3><p>作业、队列和计算节点数据来源。</p></div></div>
-            <label>LSF Bin 目录<input name="lsf_bin_dir" placeholder="/opt/lsf/10.1/linux3.10-glibc2.17-x86_64/bin"><small>包含 bjobs、bqueues、bhosts 与 lsload。</small></label>
-            <label class="textarea-label">LSF 环境变量<textarea name="lsf_env" rows="7" placeholder="LSF_ENVDIR=/etc/lsf.conf&#10;PATH=/opt/lsf/.../bin:$PATH"></textarea><small>每行一个 KEY=VALUE；只允许 LSF_*、PATH、LD_LIBRARY_PATH。</small></label>
+            <label>LSF Bin 目录<input name="lsf_bin_dir" placeholder="/path/to/lsf/bin"><small>填写现场目录，包含 bjobs、bqueues、bhosts 与 lsload。</small></label>
+            <label class="textarea-label">LSF 环境变量<textarea name="lsf_env" rows="7" placeholder="LSF_ENVDIR=/path/to/lsf/conf&#10;PATH=/path/to/lsf/bin:$PATH"></textarea><small>每行一个 KEY=VALUE；只允许 LSF_*、PATH、LD_LIBRARY_PATH。</small></label>
           </section>
 
           <section class="config-section collector-section flexnet-section">
             <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License</h3><p>EDA License 特征和容量数据来源。</p></div></div>
-            <label>lmstat 完整路径<input name="lmstat_path" placeholder="/opt/flexnet/bin/lmstat"><small>指定可执行 lmstat 的绝对路径。</small></label>
+            <label>lmstat 完整路径<input name="lmstat_path" placeholder="/path/to/lmstat"><small>填写现场可执行 lmstat 的绝对路径。</small></label>
             <label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"><small>多个服务器以英文逗号分隔。</small></label>
             <label>License Vendors（英文 daemon 名称）<input name="license_vendor" placeholder="snpslmd,cdslmd"><small>填写 lmstat 输出中的英文 daemon 名称；可填多个，使用英文逗号分隔，例如 snpslmd,cdslmd。不要使用顿号或空格。</small></label>
           </section>

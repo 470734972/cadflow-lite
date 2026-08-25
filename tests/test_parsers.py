@@ -48,8 +48,8 @@ def test_parse_lmstat_includes_node_locked_inventory():
 
 
 def test_collection_failure_detail_identifies_failed_data_source():
-    assert collection_failure_detail({"status": "error", "error": "required command is not executable: /eda/license/flexlm/lmstat"}) == {
-        "component": "FlexNet License", "message": "required command is not executable: /eda/license/flexlm/lmstat",
+    assert collection_failure_detail({"status": "error", "error": "required command is not executable: /path/to/lmstat"}) == {
+        "component": "FlexNet License", "message": "required command is not executable: /path/to/lmstat",
     }
     assert collection_failure_detail({"status": "error", "error": "bhosts timed out"}) == {
         "component": "LSF 节点", "message": "bhosts timed out",
@@ -71,7 +71,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
             self.commands = []
 
         def check_available(self, commands):
-            return {command: f"/opt/lsf/bin/{command}" for command in commands}
+            return {command: f"/path/to/lsf/bin/{command}" for command in commands}
 
         def run(self, argv):
             self.commands.append(argv)
@@ -85,7 +85,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
             return outputs[argv[0]]
 
     runner = FakeRunner()
-    payload = LsfCollector(20, "/opt/flexnet/lmstat", ("27000@license01",), license_vendor="snpslmd", runner=runner).collect()
+    payload = LsfCollector(20, "/path/to/lmstat", ("27000@license-host",), license_vendor="snpslmd", runner=runner).collect()
     assert payload["jobs"][0]["runtime_seconds"] == 3600
     assert payload["jobs"][0]["requested_mem_mb"] == 0
     assert payload["jobs"][0]["submit_host"] == "login01"
@@ -100,8 +100,8 @@ def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():
     class BrokenLicenseRunner:
         def check_available(self, commands):
             if commands == ["lmstat"]:
-                raise CommandError("required command is not executable: /eda/license/flexlm/lmstat")
-            return {command: f"/opt/lsf/bin/{command}" for command in commands}
+                raise CommandError("required command is not executable: /path/to/lmstat")
+            return {command: f"/path/to/lsf/bin/{command}" for command in commands}
 
         def run(self, argv):
             outputs = {
@@ -115,4 +115,4 @@ def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():
     payload = LsfCollector(20, "/missing/lmstat", ("27000@license01",), runner=BrokenLicenseRunner()).collect()
     assert payload["hosts"][0]["name"] == "compute01"
     assert payload["licenses"] == []
-    assert payload["_warnings"] == ["FlexNet License: required command is not executable: /eda/license/flexlm/lmstat"]
+    assert payload["_warnings"] == ["FlexNet License: required command is not executable: /path/to/lmstat"]

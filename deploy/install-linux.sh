@@ -8,7 +8,7 @@ SERVICE_USER=cadflow
 PIP_INDEX_URL=${CADFLOW_PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}
 SOURCE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-usage(){ echo "Usage: sudo bash deploy/install-rocky10.sh [--source DIR] [--service-user USER] [--no-firewall]"; }
+usage(){ echo "Usage: sudo bash deploy/install-linux.sh [--source DIR] [--service-user USER] [--no-firewall]"; }
 while [[ $# -gt 0 ]]; do case "$1" in
   --source) SOURCE_DIR=$2; shift 2;;
   --service-user) SERVICE_USER=$2; shift 2;;

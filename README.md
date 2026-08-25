@@ -1,6 +1,6 @@
 # CADFlow Lite
 
-CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在 Rocky Linux 上以原生 Python + systemd 部署，也可由普通账户在 LSF 登录节点手动运行。
+CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在支持 Bash、Python 和可选 systemd 的 Linux 主机上部署，也可由普通账户在 LSF 登录节点手动运行。
 
 不依赖 Docker、Podman、Docker Compose 或 Maven/POM；服务启动后直接访问 `http://服务器IP:8080`。
 
@@ -16,7 +16,7 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 | License | 读取 FlexNet `lmstat`，按 Vendor、特征名和状态筛选许可证使用情况 |
 | 配置 | 在 Web 中分别配置 LSF 与 FlexNet 采集源，并通过只读 LSF 预检后启用真实采集 |
 | 主题 | 默认亮色显示，支持一键切换深色模式，并记住浏览器的选择 |
-| 安装升级 | Rocky Linux 一键安装、systemd 开机自启、稳定命令一键升级及失败自动回滚 |
+| 安装升级 | Linux 一键安装、可选 systemd 开机自启、稳定命令一键升级及失败自动回滚 |
 
 ## 产品界面
 
@@ -77,20 +77,20 @@ FlexNet 命令 (lmstat -a) ─────────────────�
 - 采集结果保存在 SQLite（WAL 模式）；`/metrics` 可供 Prometheus 抓取。
 - 首页 SLA 使用近 24 小时采集快照计算 LSF 作业、队列、节点、FlexNet License 与整体采集链路的可用性，同时公开样本覆盖率；它不替代独立的网络/端口存活探针。
 
-## Rocky Linux 一键安装
+## Linux 一键安装（可选 systemd）
 
-在 Rocky 10.2（或兼容环境）中执行：
+`install-linux.sh` 适用于带有 Bash、Python 3、systemd、curl、tar 和常用 POSIX 工具的 Linux 主机。脚本不调用 `dnf`、`yum` 或其他发行版专属包管理器；依赖需要预先由管理员提供，或通过 `--source` 使用已准备好的离线源码。没有 systemd、不能使用 root，或需要保持系统环境不变时，请使用下面的普通账户部署方式。
 
 ```bash
 git clone https://gitee.com/raychade/cadflow-lite.git
 cd cadflow-lite
-sudo bash deploy/install-rocky10.sh
+sudo bash deploy/install-linux.sh
 ```
 
 安装完成后，打开：
 
 ```text
-http://ROCKY_IP:8080
+http://SERVER_IP:8080
 ```
 
 默认以 Demo 模式启动，便于立即验证页面。真实 LSF 环境请在左侧 **配置** 页面填写 LSF 和 FlexNet 参数后保存。
@@ -98,25 +98,43 @@ http://ROCKY_IP:8080
 常用目录：
 
 ```text
-/opt/cadflow-lite/current                 当前运行版本（软链接）
-/opt/cadflow-lite/releases/<timestamp>    各版本发布目录
-/etc/cadflow-lite/cadflow.env             持久化服务配置
-/var/lib/cadflow-lite/cadflow.db           SQLite 数据和 Web 配置
+<app-root>/current                         当前运行版本（软链接）
+<app-root>/releases/<timestamp>            各版本发布目录
+<config-dir>/cadflow.env                   持久化服务配置
+<data-dir>/cadflow.db                      SQLite 数据和 Web 配置
 ```
 
 如果不希望安装脚本调整防火墙：
 
 ```bash
-sudo bash deploy/install-rocky10.sh --no-firewall
+sudo bash deploy/install-linux.sh --no-firewall
 ```
 
 ## 离线普通账户部署（不使用 systemd）
 
-适用于不能访问外网、不能修改系统配置、且只允许普通账户运行的 LSF 登录节点。以下示例使用 Python 3.9；如果现场提供 Python 3.12，也可以将模块版本替换为 3.12。
+适用于不能访问外网、不能修改系统配置、且只允许普通账户运行的 LSF 登录节点。安装脚本会自动选择可用的 Python 3.12、3.11、3.10 或 3.9；也可以用 `--python` 明确指定现场的解释器。
+
+### 一键部署
+
+如果 Python 3.12 环境已经安装 FastAPI/Uvicorn，直接在项目目录执行：
+
+```bash
+bash deploy/install-user.sh --python python3.12
+```
+
+脚本会检测该 Python 是否已有 FastAPI/Uvicorn：如果已有，就创建使用系统包的 `.venv`，不下载、不安装；如果没有，则从 `wheelhouse/` 离线安装。随后生成通用 `.cadflow.env`、启动 8080 并验证健康检查。它不会写入 LSF/FlexNet 路径；首次打开页面后，在“配置”菜单填写现场路径并保存即可。如果 `python3.12` 已在 PATH 中，上面就是 RHEL 8.10 的完整一键部署命令。也可以指定任意项目目录、Python 和端口：
+
+```bash
+bash deploy/install-user.sh \
+  --app-dir /path/to/cadflow \
+  --wheelhouse /path/to/wheelhouse \
+  --python python3 \
+  --port 8080
+```
 
 ### 1. 在可联网机器准备 Linux 依赖
 
-不要在 Windows 上直接安装 Windows wheel。下载目标平台为 Linux x86_64、Python 3.9 的 wheel：
+不要在 Windows 上直接安装 Windows wheel。下载目标平台为 Linux x86_64、Python 3.12 的 wheel（纯 Python 依赖也可被 Python 3.9+ 使用）：
 
 ```powershell
 py -3.12 -m pip download `
@@ -124,41 +142,37 @@ py -3.12 -m pip download `
   --only-binary=:all: `
   --platform manylinux_2_17_x86_64 `
   --implementation cp `
-  --python-version 3.9 `
+  --python-version 3.12 `
   "fastapi>=0.115,<1" `
   "uvicorn>=0.30,<1"
 ```
 
-将 `wheelhouse` 目录复制到服务器项目目录，例如 `/work3/ruichen/cadflow/wheelhouse`。这里安装基础 Uvicorn 即可，不需要 `uvicorn[standard]` 的可选本地扩展。
+将 `wheelhouse` 目录复制到服务器项目目录下。这里安装基础 Uvicorn 即可，不需要 `uvicorn[standard]` 的可选本地扩展。
 
 ### 2. 在服务器创建虚拟环境并离线安装
 
 ```tcsh
-cd /work3/ruichen/cadflow
-module load runtime/python/3.9.7
-python3 -m venv .venv
+cd <项目目录>
+python3.12 --version
+python3.12 -m venv .venv
 .venv/bin/python -m pip install --no-index --find-links=wheelhouse \
   "fastapi>=0.115,<1" "uvicorn>=0.30,<1"
 ```
 
 ### 3. 以普通账户手动启动
 
-下面的 LSF 路径取自现场环境；集群名应以 `lsid` 输出为准。License Server 暂时留空时，作业、队列和节点仍可采集，之后可在 Web 的“配置”页面补充 FlexNet 参数。
+首次启动不需要填写任何现场 LSF/FlexNet 路径。应用先以 Demo 模式启动，随后在 Web 的“配置”页面填写集群名、LSF Bin、LSF 环境变量、`lmstat`、License Server 和 Vendor；这些值会保存到 SQLite，不写入源码或启动脚本。
 
 ```tcsh
-setenv CADFLOW_MODE lsf
-setenv CADFLOW_CLUSTER_NAME bdrd
-setenv CADFLOW_DB_PATH /work3/ruichen/cadflow/data/cadflow.db
+setenv CADFLOW_MODE demo
+setenv CADFLOW_CLUSTER_NAME demo-cluster
+setenv CADFLOW_DB_PATH ./data/cadflow.db
 setenv CADFLOW_BIND_HOST 0.0.0.0
 setenv CADFLOW_PORT 8080
-setenv CADFLOW_LSF_BIN_DIR /cadtools/lsf10.1/10.1/linux3.10-glibc2.17-x86_64/bin
-setenv CADFLOW_LMSTAT_PATH `which lmstat`
-setenv CADFLOW_LICENSE_SERVERS ""
-setenv CADFLOW_LICENSE_VENDOR ""
 setenv CADFLOW_ADMIN_TOKEN `./.venv/bin/python -c 'import secrets; print(secrets.token_hex(32))'`
 
 mkdir -p data logs
-nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 >& logs/cadflow.log &
+nohup .venv/bin/python -m uvicorn app.main:app --host "$CADFLOW_BIND_HOST" --port "$CADFLOW_PORT" >& logs/cadflow.log &
 echo $! > cadflow.pid
 ```
 
@@ -173,36 +187,70 @@ kill `cat cadflow.pid`
 
 该方式只在当前用户目录创建 `.venv`、SQLite 数据和日志，不创建 systemd 服务，不修改防火墙、LSF 配置或系统 Python。
 
+### 4. 普通账户一键更新
+
+`deploy/update-user.sh` 不使用 `sudo` 或 `systemctl`。它从当前 Git 远程执行快进更新，先编译检查，再备份 SQLite、重启 `cadflow.pid` 记录的进程，并在健康检查失败时回滚到旧提交。更新不会重新联网安装依赖；如果依赖发生变化，先把离线 wheel 放入 `wheelhouse/` 并手动更新 `.venv`。为避免更新后误启动成 Demo 模式，脚本要求当前 shell 已设置 `CADFLOW_MODE`，或项目中存在 `.cadflow.env`。
+
+更新前请保持 Git 工作区干净；`.cadflow.env`、`data/`、`logs/`、`backups/` 和 `wheelhouse/` 等运行时目录已加入忽略列表，不会阻止更新。
+
+建议把启动时的通用变量保存到项目目录下的 `.cadflow.env`（该文件已被 `.gitignore` 忽略），这样重新登录后也能一键更新。LSF/FlexNet 路径不要放在这个文件中，统一从 Web“配置”页面维护：
+
+```bash
+cd <项目目录>
+cat > .cadflow.env <<'EOF'
+CADFLOW_MODE=demo
+CADFLOW_CLUSTER_NAME=demo-cluster
+CADFLOW_DB_PATH=./data/cadflow.db
+CADFLOW_BIND_HOST=0.0.0.0
+CADFLOW_PORT=8080
+CADFLOW_ADMIN_TOKEN=替换为已有管理令牌
+EOF
+chmod 600 .cadflow.env
+```
+
+执行更新：
+
+```bash
+cd <项目目录>
+bash deploy/update-user.sh
+```
+
+脚本会保留 `.venv`、`data/`、`logs/` 和 `backups/`，并输出新的提交号、PID、健康检查地址和日志路径。也可以指定分支：
+
+```bash
+bash deploy/update-user.sh --ref master
+```
+
 ## 配置真实 LSF / FlexNet
 
 在 **配置** 页面填写：
 
-1. 运行模式选择 **LSF**，并填写集群名称。
-2. 填写 LSF Bin 目录，例如 `/eda/lsf/10.1/linux2.6-glibc2.3-x86_64/bin`。
+1. 运行模式选择 **LSF**，并填写现场集群名称。
+2. 填写现场 LSF Bin 目录；不要修改源码，直接在此页面保存。
 3. 在 LSF 环境变量中填写 `LSF_ENVDIR`、`LSF_SERVERDIR`、`LSF_LIBDIR`、`LSF_BINDIR` 等现场变量。
-4. 填写 `lmstat` 的完整路径和 License Server，例如 `27000@cad01`。
-5. License Vendor 可填写多个名称，使用英文逗号分隔，例如：`snpslmd,cdslmd,mgcld`。
+4. 填写现场 `lmstat` 的完整路径和 License Server，例如 `27000@license-host`。
+5. License Vendor 可填写多个名称，使用英文逗号分隔，例如：`vendor_a,vendor_b`。
 6. 点击 **保存配置并预检 LSF**。预检通过后，后续采集即使用现场真实命令。
 
-建议先以服务账号验证现场命令：
+如需在服务器上验证现场命令，请将下面的占位路径替换为实际路径：
 
 ```bash
-sudo -u cadflow bash -lc '
-  source /eda/lsf/conf/profile.lsf
+sudo -u <运行账户> bash -lc '
+  source <LSF 环境脚本>
   bjobs -u all -a
   bqueues -w
   bhosts -w
   lsload -w
-  /eda/license/flexlm/lmstat -a -c 27000@cad01
+  <lmstat 完整路径> -a -c <端口@许可证服务器>
 '
 ```
 
-## 运行、日志与升级
+## systemd 模式的运行、日志与升级
 
-从本次版本开始，新安装会自动提供 `cadflow-update`。由旧版本升级到本版本时，先执行一次原有长命令：
+从本次版本开始，新安装会自动提供 `cadflow-update`。旧版本升级时，可直接运行旧安装目录中已有的升级入口；新版本统一使用 `upgrade-linux.sh`。
 
 ```bash
-sudo bash /opt/cadflow-lite/current/deploy/upgrade-rocky10.sh
+sudo cadflow-update
 ```
 
 这次升级成功后，后续统一使用短命令：

@@ -16,14 +16,16 @@ def _int_env(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     mode: str = os.getenv("CADFLOW_MODE", "demo").lower()
-    cluster_name: str = os.getenv("CADFLOW_CLUSTER_NAME", "eda-lab")
+    cluster_name: str = os.getenv("CADFLOW_CLUSTER_NAME", "demo-cluster")
     db_path: Path = Path(os.getenv("CADFLOW_DB_PATH", "./data/cadflow.db"))
     admin_token: str = os.getenv("CADFLOW_ADMIN_TOKEN", "")
     collect_interval_seconds: int = _int_env("CADFLOW_COLLECT_INTERVAL_SECONDS", 60)
     command_timeout_seconds: int = _int_env("CADFLOW_COMMAND_TIMEOUT_SECONDS", 20)
     stale_after_seconds: int = _int_env("CADFLOW_STALE_AFTER_SECONDS", 0)
     lsf_bin_dir: str = os.getenv("CADFLOW_LSF_BIN_DIR", "")
-    lmstat_path: str = os.getenv("CADFLOW_LMSTAT_PATH", "/opt/flexnet/bin/lmstat")
+    # The executable location is site-specific and is entered in the Web
+    # configuration page when LSF mode is enabled.
+    lmstat_path: str = os.getenv("CADFLOW_LMSTAT_PATH", "")
     license_vendor: str = os.getenv("CADFLOW_LICENSE_VENDOR", "")
     license_servers: tuple[str, ...] = tuple(
         value.strip()
@@ -84,7 +86,7 @@ class RuntimeConfig:
         if any(not re.fullmatch(r"[A-Za-z0-9_.-]+", item) for item in vendors):
             raise ValueError("license_vendor must contain English daemon names separated by commas")
         config = cls(
-            str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "eda-lab")).strip(),
+            str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "demo-cluster")).strip(),
             int(data.get("collect_interval_seconds", 300)), int(data.get("command_timeout_seconds", 45)),
             int(data.get("stale_after_seconds", 0)), str(data.get("lsf_bin_dir", "")).strip(),
             str(data.get("lmstat_path", "")).strip(), tuple(servers), ",".join(vendors), allowed,

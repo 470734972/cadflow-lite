@@ -6,7 +6,7 @@ DATA_DIR=/var/lib/cadflow-lite
 PIP_INDEX_URL=${CADFLOW_PIP_INDEX_URL:-https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple}
 GITEE_URL=https://gitee.com/raychade/cadflow-lite.git
 SOURCE_DIR=
-usage(){ echo "Usage: sudo bash deploy/upgrade-rocky10.sh [--source DIR] [--ref BRANCH_OR_TAG]"; }
+usage(){ echo "Usage: sudo bash deploy/upgrade-linux.sh [--source DIR] [--ref BRANCH_OR_TAG]"; }
 REF=master
 while [[ $# -gt 0 ]]; do case "$1" in --source) SOURCE_DIR=$2; shift 2;; --ref) REF=$2; shift 2;; -h|--help) usage; exit 0;; *) usage >&2; exit 2;; esac; done
 [[ ${EUID} -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
@@ -24,7 +24,7 @@ if [[ -z $SOURCE_DIR ]]; then
   TMPDIR=$(mktemp -d); git clone --depth 1 --branch "$REF" "$GITEE_URL" "$TMPDIR/source"; SOURCE_DIR="$TMPDIR/source"
 fi
 [[ -f "$SOURCE_DIR/pyproject.toml" ]] || { echo "Invalid source directory: $SOURCE_DIR" >&2; exit 1; }
-[[ -L "$APP_ROOT/current" ]] || { echo "CADFlow is not installed; run install-rocky10.sh first" >&2; exit 1; }
+[[ -L "$APP_ROOT/current" ]] || { echo "CADFlow is not installed; run install-linux.sh first" >&2; exit 1; }
 
 install -d -m 0755 "$APP_ROOT/releases" "$DATA_DIR/backups"
 RELEASE=$(mktemp -d "$APP_ROOT/releases/$(date +%Y%m%d%H%M%S).XXXXXX")

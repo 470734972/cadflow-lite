@@ -19,7 +19,7 @@ def test_health_and_summary():
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/config").json()["mode"] == "demo"
         summary = client.get("/api/summary").json()
-        assert summary["cluster"] == "eda-lab"
+        assert summary["cluster"] == "demo-cluster"
         assert summary["totals"]["hosts"] == 8
         sla = client.get("/api/sla").json()
         assert sla["window_hours"] == 24
