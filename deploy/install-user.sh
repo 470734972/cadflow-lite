@@ -306,7 +306,9 @@ if [[ -n "$OLD_PID" ]]; then
   stop_pid "$OLD_PID" || fail "existing CADFlow process $OLD_PID did not stop"
 fi
 
-nohup bash "$APP_DIR/deploy/cadflow-serve" >>"$LOG_FILE" 2>&1 &
+# Do not let the long-running server inherit the install lock.  Otherwise the
+# next manual upgrade would see the healthy server as an active installer.
+nohup bash "$APP_DIR/deploy/cadflow-serve" 9>&- >>"$LOG_FILE" 2>&1 &
 NEW_PID=$!
 printf '%s\n' "$NEW_PID" > "$PID_FILE"
 

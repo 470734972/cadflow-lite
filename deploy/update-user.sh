@@ -133,7 +133,8 @@ stop_pid() {
 
 start_app() {
   mkdir -p "$(dirname "$LOG_FILE")"
-  nohup bash "$SERVE_SCRIPT" >>"$LOG_FILE" 2>&1 &
+  # Keep the long-running server independent from the updater lock.
+  nohup bash "$SERVE_SCRIPT" 9>&- >>"$LOG_FILE" 2>&1 &
   local pid=$!
   printf '%s\n' "$pid" > "$PID_FILE"
   printf '%s\n' "$pid"
