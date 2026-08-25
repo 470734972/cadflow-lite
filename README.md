@@ -16,6 +16,7 @@ CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观
 | License | 读取 FlexNet `lmstat`，按 Vendor、特征名和状态筛选许可证使用情况 |
 | 配置 | 在 Web 中分别配置 LSF 与 FlexNet 采集源，并通过只读 LSF 预检后启用真实采集 |
 | 主题 | 默认亮色显示，支持一键切换深色模式，并记住浏览器的选择 |
+| 版本信息 | 左侧栏底部显示当前 CADFlow Lite 发布版本，便于确认部署版本 |
 | 安装升级 | Linux 一键安装、可选 systemd 开机自启、稳定命令一键升级及失败自动回滚 |
 
 ## 产品界面
