@@ -18,6 +18,9 @@ dev = [
   "httpx>=0.27,<1",
   "pytest>=8,<9",
 ]
+sqlite-fallback = [
+  "pysqlite3-binary>=0.5,<1",
+]
 
 [tool.setuptools]
 packages = ["app", "app.collectors"]

@@ -111,7 +111,20 @@ command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v flock >/dev/null 2>&1 || fail "flock is required"
 
 python_supported() {
-  "$1" -c 'import sys, sqlite3; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1
+  "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1
+}
+
+python_has_sqlite() {
+  "$1" -c 'import sqlite3' >/dev/null 2>&1
+}
+
+venv_has_sqlite() {
+  "$1" -c '
+try:
+    import sqlite3
+except ModuleNotFoundError:
+    import pysqlite3
+' >/dev/null 2>&1
 }
 
 if [[ -n "$PYTHON_BIN" ]]; then
@@ -119,33 +132,43 @@ if [[ -n "$PYTHON_BIN" ]]; then
     PYTHON_BIN=$(command -v "$PYTHON_BIN" || true)
   fi
   [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]] || fail "Python executable is not available: ${CADFLOW_PYTHON_BIN:-$PYTHON_BIN}"
-  python_supported "$PYTHON_BIN" || fail "Python 3.9+ with the sqlite3 module is required: $PYTHON_BIN"
+  python_supported "$PYTHON_BIN" || fail "Python 3.9+ is required: $PYTHON_BIN"
+  if ! python_has_sqlite "$PYTHON_BIN" && [[ ! -d "$WHEELHOUSE" ]]; then
+    fail "$PYTHON_BIN lacks sqlite3; provide an offline wheelhouse containing pysqlite3-binary"
+  fi
 else
   # RHEL-family hosts may keep an older system python3 beside a newer module.
   # Prefer the newest conventional executable without changing system config.
   for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
     candidate_path=$(command -v "$candidate" || true)
-    if [[ -n "$candidate_path" ]] && python_supported "$candidate_path"; then
+    if [[ -n "$candidate_path" ]] && python_supported "$candidate_path" && python_has_sqlite "$candidate_path"; then
       PYTHON_BIN=$candidate_path
       break
     fi
   done
-  [[ -n "$PYTHON_BIN" ]] || fail "Python 3.9+ with the sqlite3 module was not found; load a compatible site-provided Python first"
+  if [[ -z "$PYTHON_BIN" && -d "$WHEELHOUSE" ]]; then
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
+      candidate_path=$(command -v "$candidate" || true)
+      if [[ -n "$candidate_path" ]] && python_supported "$candidate_path"; then
+        PYTHON_BIN=$candidate_path
+        break
+      fi
+    done
+  fi
+  [[ -n "$PYTHON_BIN" ]] || fail "Python 3.9+ with sqlite3 was not found; load a compatible Python or provide a pysqlite3 wheelhouse"
 fi
 
 PYTHON_VERSION=$($PYTHON_BIN -c 'import sys; print("%d.%d" % sys.version_info[:2])') || fail "cannot run $PYTHON_BIN"
-$VENV_DIR/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null || {
-  major=${PYTHON_VERSION%%.*}
-  minor=${PYTHON_VERSION#*.}
-  (( major > 3 || (major == 3 && minor >= 9) )) || fail "Python 3.9+ with sqlite3 is required; found $PYTHON_VERSION"
-}
 
 cd "$APP_DIR"
 exec 9>"$LOCK_FILE"
 flock -n 9 || fail "another CADFlow install/start operation is running"
 
 if [[ -x "$VENV_DIR/bin/python" ]] && ! python_supported "$VENV_DIR/bin/python"; then
-  fail "existing $VENV_DIR lacks Python sqlite3 support; move it aside (for example: mv $VENV_DIR ${VENV_DIR}.old) and rerun"
+  fail "existing $VENV_DIR is older than Python 3.9; move it aside (for example: mv $VENV_DIR ${VENV_DIR}.old) and rerun"
+fi
+if [[ -x "$VENV_DIR/bin/python" ]] && ! venv_has_sqlite "$VENV_DIR/bin/python" && [[ ! -d "$WHEELHOUSE" ]]; then
+  fail "existing $VENV_DIR lacks SQLite support; move it aside (for example: mv $VENV_DIR ${VENV_DIR}.old) and provide a compatible Python or wheelhouse"
 fi
 
 if [[ ! -x "$VENV_DIR/bin/python" ]]; then
@@ -161,14 +184,17 @@ if [[ ! -x "$VENV_DIR/bin/python" ]]; then
 fi
 VENV_PYTHON=$VENV_DIR/bin/python
 
-"$VENV_PYTHON" -c 'import sys, sqlite3; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' || \
-  fail "the virtual environment must use Python 3.9+ with sqlite3"
+python_supported "$VENV_PYTHON" || fail "the virtual environment must use Python 3.9+"
 
 if [[ $SKIP_DEPS -eq 0 ]]; then
   if [[ -d "$WHEELHOUSE" ]]; then
     echo "Installing offline dependencies from $WHEELHOUSE ..."
+    OFFLINE_REQUIREMENTS=("fastapi>=0.115,<1" "uvicorn>=0.30,<1")
+    if ! venv_has_sqlite "$VENV_PYTHON"; then
+      OFFLINE_REQUIREMENTS+=("pysqlite3-binary>=0.5,<1")
+    fi
     "$VENV_PYTHON" -m pip install --no-index --find-links="$WHEELHOUSE" \
-      "fastapi>=0.115,<1" "uvicorn>=0.30,<1" || \
+      "${OFFLINE_REQUIREMENTS[@]}" || \
       fail "offline dependency installation failed; check wheelhouse and Python ABI"
   elif "$VENV_PYTHON" -c 'import fastapi, uvicorn' >/dev/null 2>&1; then
     echo "wheelhouse not found; existing FastAPI/Uvicorn installation will be used"
@@ -179,6 +205,8 @@ else
   "$VENV_PYTHON" -c 'import fastapi, uvicorn' >/dev/null 2>&1 || \
     fail "--skip-deps requested but FastAPI/Uvicorn are missing"
 fi
+
+venv_has_sqlite "$VENV_PYTHON" || fail "Python has no sqlite3/pysqlite3 support; add pysqlite3-binary to the offline wheelhouse"
 
 "$VENV_PYTHON" -m compileall -q "$APP_DIR/app" || fail "Python source compilation failed"
 mkdir -p "$APP_DIR/data" "$(dirname "$LOG_FILE")"

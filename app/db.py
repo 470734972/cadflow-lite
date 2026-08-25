@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+try:
+    import sqlite3
+except ModuleNotFoundError as exc:  # pragma: no cover - depends on the host Python build
+    try:
+        import pysqlite3 as sqlite3
+    except ModuleNotFoundError:
+        raise RuntimeError(
+            "Python has no sqlite3 support; install pysqlite3-binary in the offline environment"
+        ) from exc
 import threading
 from pathlib import Path
 from typing import Any, Iterable, Optional

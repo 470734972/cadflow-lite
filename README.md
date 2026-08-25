@@ -112,17 +112,17 @@ sudo bash deploy/install-linux.sh --no-firewall
 
 ## 离线普通账户部署（不使用 systemd）
 
-适用于不能访问外网、不能修改系统配置、且只允许普通账户运行的 LSF 登录节点。安装脚本会自动选择可用的 Python 3.12、3.11、3.10 或 3.9；解释器必须同时提供标准库 `sqlite3` 模块。也可以用 `--python` 明确指定现场的解释器。
+适用于不能访问外网、不能修改系统配置、且只允许普通账户运行的 LSF 登录节点。安装脚本会自动选择可用的 Python 3.12、3.11、3.10 或 3.9；解释器应提供标准库 `sqlite3` 模块。如果现场 Python 缺少该扩展，可通过离线 `pysqlite3-binary` wheel 回退。也可以用 `--python` 明确指定现场的解释器。
 
 ### 一键部署
 
-如果 Python 3.12 环境已经安装 FastAPI/Uvicorn，直接在项目目录执行：
+如果 Python 3.12 环境已经安装 FastAPI/Uvicorn 且 `sqlite3` 可导入，直接在项目目录执行：
 
 ```bash
 bash deploy/install-user.sh --python python3.12
 ```
 
-脚本会检测该 Python 是否已有 FastAPI/Uvicorn：如果已有，就创建使用系统包的 `.venv`，不下载、不安装；如果没有，则从 `wheelhouse/` 离线安装。随后生成通用 `.cadflow.env`、启动 8080 并验证健康检查。它不会写入 LSF/FlexNet 路径；首次打开页面后，在“配置”菜单填写现场路径并保存即可。如果 `python3.12` 已在 PATH 中，上面就是 RHEL 8.10 的完整一键部署命令。也可以指定任意项目目录、Python 和端口：
+脚本会检测该 Python 是否已有 FastAPI/Uvicorn：如果已有，就创建使用系统包的 `.venv`，不下载、不安装；如果没有，或 Python 缺少 `sqlite3`，则从 `wheelhouse/` 离线安装（缺少 SQLite 时自动加入 `pysqlite3-binary`）。随后生成通用 `.cadflow.env`、启动 8080 并验证健康检查。它不会写入 LSF/FlexNet 路径；首次打开页面后，在“配置”菜单填写现场路径并保存即可。如果 `python3.12` 已在 PATH 中，上面就是 RHEL 8.10 的完整一键部署命令。也可以指定任意项目目录、Python 和端口：
 
 ```bash
 bash deploy/install-user.sh \
@@ -134,7 +134,7 @@ bash deploy/install-user.sh \
 
 ### 1. 在可联网机器准备 Linux 依赖
 
-不要在 Windows 上直接安装 Windows wheel。下载目标平台为 Linux x86_64、Python 3.12 的 wheel（纯 Python 依赖也可被 Python 3.9+ 使用）：
+不要在 Windows 上直接安装 Windows wheel。下载目标平台为 Linux x86_64、Python 3.12 的 Linux wheel：
 
 ```powershell
 py -3.12 -m pip download `
@@ -144,10 +144,11 @@ py -3.12 -m pip download `
   --implementation cp `
   --python-version 3.12 `
   "fastapi>=0.115,<1" `
-  "uvicorn>=0.30,<1"
+  "uvicorn>=0.30,<1" `
+  "pysqlite3-binary>=0.5,<1"
 ```
 
-将 `wheelhouse` 目录复制到服务器项目目录下。这里安装基础 Uvicorn 即可，不需要 `uvicorn[standard]` 的可选本地扩展。
+将 `wheelhouse` 目录复制到服务器项目目录下。如果目标 Python 已有标准库 `sqlite3`，脚本不会使用 `pysqlite3-binary`；否则会自动使用它作为 SQLite 回退。不需要 `uvicorn[standard]` 的可选本地扩展。
 
 ### 2. 在服务器创建虚拟环境并离线安装
 
