@@ -1,5 +1,7 @@
 # CADFlow Lite
 
+当前版本：`v0.2.0`
+
 CADFlow Lite 是面向 EDA / CAD 运维团队的轻量级 LSF 与 FlexNet 可观测门户。它将作业、用户、队列、计算节点和 License 用量汇聚到一个 Web 界面，支持 Python 3.9+；既可在支持 Bash、Python 和可选 systemd 的 Linux 主机上部署，也可由普通账户在 LSF 登录节点手动运行。
 
 不依赖 Docker、Podman、Docker Compose 或 Maven/POM；服务启动后直接访问 `http://服务器IP:8080`。
