@@ -50,8 +50,8 @@ def test_summary_uses_host_capacity_when_lsf_queues_are_unlimited():
                 "jobs": [],
                 "queues": [{"running": 4, "max_slots": 0}],
                 "hosts": [
-                    {"status": "ok", "running_slots": 2, "max_slots": 2, "cpu_pct": 1, "mem_pct": 0},
-                    {"status": "ok", "running_slots": 2, "max_slots": 2, "cpu_pct": 3, "mem_pct": 0},
+                    {"status": "ok", "running_slots": 2, "max_slots": 2, "cpu_pct": 1, "mem_pct": 0, "free_mem_mb": 1024},
+                    {"status": "ok", "running_slots": 2, "max_slots": 2, "cpu_pct": 3, "mem_pct": 0, "free_mem_mb": 2048},
                 ],
                 "licenses": [],
             }
@@ -63,6 +63,7 @@ def test_summary_uses_host_capacity_when_lsf_queues_are_unlimited():
     summary = build_summary(FakeDb(), "eda_cluster")
     assert summary["totals"]["running_slots"] == 4
     assert summary["totals"]["max_slots"] == 4
+    assert summary["totals"]["free_mem_mb"] == 3072
     assert summary["efficiency"]["slot_pct"] == 100
 
 

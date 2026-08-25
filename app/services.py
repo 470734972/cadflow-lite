@@ -46,6 +46,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     queue_max_slots = sum(queue["max_slots"] for queue in queues)
     host_running_slots = sum(host["running_slots"] for host in hosts)
     host_max_slots = sum(host["max_slots"] for host in hosts)
+    free_mem_mb = sum(max(0, float(host.get("free_mem_mb", 0) or 0)) for host in hosts)
     # An LSF queue MAX of "-" means unlimited and is stored as zero. In that
     # case, hosts are the authoritative physical capacity for the dashboard.
     running_slots = queue_running_slots if queues else host_running_slots
@@ -60,6 +61,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
             "hosts": len(hosts), "unavailable_hosts": sum(1 for host in hosts if host["status"].lower() not in {"ok", "closed_full"}),
             "running_slots": running_slots,
             "max_slots": max_slots,
+            "free_mem_mb": round(free_mem_mb, 1),
             "memory_waste_jobs": len(waste_jobs),
             "license_risks": sum(1 for item in licenses if item["status"] in {"warning", "critical"}),
         },
