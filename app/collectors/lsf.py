@@ -21,7 +21,7 @@ class ParseError(ValueError):
 class SafeRunner:
     """Run only the fixed, read-only commands used by the LSF collector."""
 
-    ALLOWED = {"bjobs", "bqueues", "bhosts", "lshost", "lsload", "lmstat"}
+    ALLOWED = {"bjobs", "bqueues", "bhosts", "lshosts", "lsload", "lmstat"}
 
     def __init__(self, timeout: int = 20, lsf_bin_dir: Optional[Path] = None, lmstat_path: Optional[Path] = None, extra_env: Optional[Mapping[str, str]] = None):
         self.timeout = timeout
@@ -178,10 +178,10 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     return result
 
 
-def parse_lshost(text: str) -> dict[str, dict[str, float]]:
-    """Return physical host capacity values from ``lshost -w``.
+def parse_lshosts(text: str) -> dict[str, dict[str, float]]:
+    """Return physical host capacity values from ``lshosts -w``.
 
-    ``lshost`` reports ``maxmem`` as the host's total physical memory while
+    ``lshosts`` reports ``maxmem`` as the host's total physical memory while
     ``lsload`` reports the currently available memory.  Header spelling has
     varied slightly between LSF releases, so this parser matches columns
     case-insensitively and ignores extra resource columns.
@@ -189,7 +189,7 @@ def parse_lshost(text: str) -> dict[str, dict[str, float]]:
     lines = [line.split() for line in text.splitlines() if line.strip()]
     header_index = next((index for index, values in enumerate(lines) if {value.lower() for value in values} >= {"host_name", "maxmem"}), None)
     if header_index is None:
-        raise ParseError("lshost output is missing HOST_NAME or maxmem columns")
+        raise ParseError("lshosts output is missing HOST_NAME or maxmem columns")
     headers = [value.lower() for value in lines[header_index]]
     result: dict[str, dict[str, float]] = {}
     for values in lines[header_index + 1 :]:
@@ -318,10 +318,10 @@ class LsfCollector(Collector):
         load_output = self.runner.run(["lsload", "-w"])
         loads = parse_lsload(load_output)
         try:
-            capacities = parse_lshost(self.runner.run(["lshost", "-w"]))
+            capacities = parse_lshosts(self.runner.run(["lshosts", "-w"]))
         except (CommandError, KeyError, ParseError):
             # Keep LSF collection usable on installations that do not expose
-            # lshost; the UI will explicitly show that total memory is unknown.
+            # lshosts; the UI will explicitly show that total memory is unknown.
             capacities = {}
         parsed = parse_whitespace_table(hosts_output, {"HOST_NAME", "STATUS", "MAX", "RUN"})
         hosts = []
@@ -333,7 +333,7 @@ class LsfCollector(Collector):
             hosts.append({
                 "name": name, "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
                 "running_slots": int(_number(row["RUN"])), "cpu_pct": load.get("cpu_pct", 0),
-                # lshost reports total memory; lsload reports currently available memory.
+                # lshosts reports total memory; lsload reports currently available memory.
                 "total_mem_mb": total_mem_mb,
                 "mem_pct": round((1 - free_mem_mb / total_mem_mb) * 100, 1) if total_mem_mb > 0 else -1,
                 "load_1m": load.get("load_1m", 0), "load_15m": load.get("load_15m", 0),
