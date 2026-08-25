@@ -41,7 +41,6 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     hosts = db.latest_rows("hosts", cluster)
     licenses = db.latest_rows("licenses", cluster)
     running_jobs = [job for job in jobs if job["status"] == "RUN"]
-    waste_jobs = [job for job in running_jobs if job["requested_mem_mb"] and job["used_mem_mb"] / job["requested_mem_mb"] < 0.4]
     queue_running_slots = sum(queue["running"] for queue in queues)
     queue_max_slots = sum(queue["max_slots"] for queue in queues)
     host_running_slots = sum(host["running_slots"] for host in hosts)
@@ -68,7 +67,6 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
             "max_slots": max_slots,
             "total_mem_mb": round(total_mem_mb, 1),
             "free_mem_mb": round(free_mem_mb, 1),
-            "memory_waste_jobs": len(waste_jobs),
             "license_risks": sum(1 for item in licenses if item["status"] in {"warning", "critical"}),
         },
         "efficiency": {

@@ -27,6 +27,10 @@ def test_health_and_summary():
         assert client.get("/api/config").json()["mode"] == "demo"
         summary = client.get("/api/summary").json()
         assert summary["cluster"] == "demo-cluster"
+        assert "memory_waste_jobs" not in summary["totals"]
+        jobs = client.get("/api/jobs").json()
+        assert jobs
+        assert not {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"} & jobs[0].keys()
         assert summary["totals"]["hosts"] == 8
         sla = client.get("/api/sla").json()
         assert sla["window_hours"] == 24
@@ -40,7 +44,8 @@ def test_users_are_aggregated_from_current_jobs():
         assert response.status_code == 200
         users = response.json()
         assert users
-        assert {"user", "total_jobs", "running_slots", "cpu_efficiency_pct"} <= users[0].keys()
+        assert {"user", "total_jobs", "running_slots"} <= users[0].keys()
+        assert "cpu_efficiency_pct" not in users[0]
         assert sum(user["total_jobs"] for user in users) == len(client.get("/api/jobs").json())
 
 

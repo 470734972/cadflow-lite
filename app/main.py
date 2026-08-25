@@ -141,7 +141,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.8", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.9", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -263,7 +263,11 @@ def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Option
         rows = [row for row in rows if row["user"].lower() == user.lower()]
     if queue:
         rows = [row for row in rows if row["queue"].lower() == queue.lower()]
-    return rows[:limit]
+    # LSF 10.1 does not expose reliable per-job CPU or memory efficiency
+    # values through the read-only snapshot commands. Keep those legacy
+    # storage fields internal and do not publish misleading zeroes in the API.
+    hidden_metrics = {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"}
+    return [{key: value for key, value in row.items() if key not in hidden_metrics} for row in rows[:limit]]
 
 
 @app.get("/api/users")
@@ -274,7 +278,7 @@ def users() -> list[dict[str, Union[int, str]]]:
         username = job["user"] or "unknown"
         row = grouped.setdefault(username, {
             "user": username, "total_jobs": 0, "running_jobs": 0, "pending_jobs": 0,
-            "exit_jobs": 0, "running_slots": 0, "total_slots": 0, "cpu_efficiency_sum": 0,
+            "exit_jobs": 0, "running_slots": 0, "total_slots": 0,
         })
         status = job["status"].upper()
         slots = int(job["slots"] or 0)
@@ -287,12 +291,8 @@ def users() -> list[dict[str, Union[int, str]]]:
             row["pending_jobs"] += 1
         elif status == "EXIT":
             row["exit_jobs"] += 1
-        row["cpu_efficiency_sum"] += round(float(job["cpu_efficiency"] or 0) * 100)
-
     result = []
     for row in grouped.values():
-        total_jobs = int(row["total_jobs"])
-        row["cpu_efficiency_pct"] = round(int(row.pop("cpu_efficiency_sum")) / total_jobs) if total_jobs else 0
         result.append(row)
     return sorted(result, key=lambda row: (-int(row["running_slots"]), -int(row["total_jobs"]), str(row["user"])))
 
