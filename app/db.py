@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS queues (
     running INTEGER NOT NULL DEFAULT 0,
     pending INTEGER NOT NULL DEFAULT 0,
     suspended INTEGER NOT NULL DEFAULT 0,
+    host_names TEXT NOT NULL DEFAULT '',
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
@@ -160,6 +161,7 @@ class Database:
             "per_user_slots": "INTEGER NOT NULL DEFAULT 0",
             "per_processor_slots": "REAL NOT NULL DEFAULT 0",
             "per_host_slots": "REAL NOT NULL DEFAULT 0",
+            "host_names": "TEXT NOT NULL DEFAULT ''",
         }
         for name, definition in migrations.items():
             if name not in columns:

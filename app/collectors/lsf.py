@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -207,6 +208,22 @@ def parse_whitespace_table(text: str, required: set[str]) -> list[dict[str, str]
     return rows
 
 
+def parse_bqueues_hosts(text: str) -> dict[str, str]:
+    """Return each queue's configured LSF host expression from ``bqueues -l``."""
+    result: dict[str, str] = {}
+    current: Optional[str] = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        queue_match = re.match(r"^QUEUE\s*:\s*(\S+)", line, re.I)
+        if queue_match:
+            current = queue_match.group(1)
+            continue
+        hosts_match = re.match(r"^HOSTS?\s*:\s*(.*?)\s*$", line, re.I)
+        if current and hosts_match:
+            result[current] = hosts_match.group(1).strip()
+    return result
+
+
 def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     """Return actual LSF load-index values keyed by host.
 
@@ -382,7 +399,8 @@ class LsfCollector(Collector):
 
     def collect(self) -> dict[str, object]:
         self.preflight()
-        payload: dict[str, object] = {"jobs": self._jobs(), "queues": self._queues(), "hosts": self._hosts(), "licenses": []}
+        hosts = self._hosts()
+        payload: dict[str, object] = {"jobs": self._jobs(), "queues": self._queues([host["name"] for host in hosts]), "hosts": hosts, "licenses": []}
         if self.license_servers:
             try:
                 self.runner.check_available(["lmstat"])
@@ -442,10 +460,26 @@ class LsfCollector(Collector):
             }
         return list(jobs.values())
 
-    def _queues(self) -> list[dict]:
+    def _queues(self, host_names: Optional[Sequence[str]] = None) -> list[dict]:
         # LSF 10.1.0.0 does not support bqueues -o or -noheader. The standard
         # wide table is stable across the legacy and current command variants.
         parsed = parse_whitespace_table(self.runner.run(["bqueues", "-w"]), {"QUEUE_NAME", "STATUS", "MAX", "PEND", "RUN", "SUSP"})
+        try:
+            host_specs = parse_bqueues_hosts(self.runner.run(["bqueues", "-l"]))
+        except (CommandError, ParseError):
+            # Queue host membership is optional enrichment. Older/site-specific
+            # clients may not expose the long queue description.
+            host_specs = {}
+
+        def queue_hosts(name: str) -> list[str]:
+            spec = host_specs.get(name, "").strip()
+            if not spec:
+                return []
+            tokens = [token.strip("{},") for token in re.split(r"[\s,]+", spec) if token.strip("{},")]
+            if any(token.lower() in {"all", "allhosts"} for token in tokens):
+                return list(host_names or [])
+            return tokens
+
         return [{
             "name": row["QUEUE_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),
             # JL/U is the maximum number of job slots one user can consume
@@ -454,6 +488,7 @@ class LsfCollector(Collector):
             "per_processor_slots": _number(row.get("JL/P", "")),
             "per_host_slots": _number(row.get("JL/H", "")),
             "running": int(_number(row["RUN"])), "pending": int(_number(row["PEND"])), "suspended": int(_number(row["SUSP"])),
+            "host_names": json.dumps(queue_hosts(row["QUEUE_NAME"]), ensure_ascii=False),
         } for row in parsed]
 
     def _hosts(self) -> list[dict]:
