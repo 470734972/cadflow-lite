@@ -289,13 +289,18 @@ set -a
 source "$ENV_FILE"
 set +a
 
+is_cadflow_pid() {
+  local pid=$1
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  ps -p "$pid" -o args= 2>/dev/null | grep -Fq 'app.main:app' || return 1
+}
+
 read_pid() {
   [[ -s "$PID_FILE" ]] || return 1
   local pid
   pid=$(tr -d '[:space:]' < "$PID_FILE")
-  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
-  ps -p "$pid" -o args= 2>/dev/null | grep -Fq 'app.main:app' || return 1
+  is_cadflow_pid "$pid" || return 1
   printf '%s\n' "$pid"
 }
 
@@ -309,6 +314,10 @@ stop_pid() {
   # The PID was validated by read_pid (numeric, alive, and running
   # app.main:app).  If the graceful shutdown is stuck, terminate only this
   # recorded CADFlow process so an upgrade cannot leave port 8080 occupied.
+  if ! is_cadflow_pid "$pid"; then
+    echo "Recorded CADFlow PID $pid changed or exited; refusing to send KILL" >&2
+    return 1
+  fi
   echo "CADFlow process $pid did not stop after TERM; sending KILL to the recorded CADFlow PID" >&2
   kill -KILL "$pid" 2>/dev/null || true
   for _ in $(seq 1 10); do
