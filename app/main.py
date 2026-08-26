@@ -147,7 +147,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.18", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.19", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -262,7 +262,19 @@ def sla() -> dict[str, Any]:
 
 
 @app.get("/api/jobs")
-def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Optional[str] = None, limit: int = Query(1000, ge=1, le=1000)) -> list[dict]:
+def jobs(
+    status: Optional[str] = None,
+    user: Optional[str] = None,
+    queue: Optional[str] = None,
+    limit: Optional[int] = Query(None, ge=1),
+) -> list[dict]:
+    """Return jobs from the current snapshot.
+
+    By default the API returns the complete current snapshot, so the result
+    count reflects what LSF reported instead of an application-imposed cap.
+    Callers may still provide ``limit`` when they intentionally want a
+    smaller response (for example, an external integration or CLI query).
+    """
     rows = db.latest_rows("jobs", runtime.config.cluster_name)
     if status:
         rows = [row for row in rows if row["status"].lower() == status.lower()]
@@ -274,7 +286,8 @@ def jobs(status: Optional[str] = None, user: Optional[str] = None, queue: Option
     # values through the read-only snapshot commands. Keep those legacy
     # storage fields internal and do not publish misleading zeroes in the API.
     hidden_metrics = {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"}
-    return [{key: value for key, value in row.items() if key not in hidden_metrics} for row in rows[:limit]]
+    selected = rows if limit is None else rows[:limit]
+    return [{key: value for key, value in row.items() if key not in hidden_metrics} for row in selected]
 
 
 @app.get("/api/users")

@@ -9,7 +9,7 @@ let savedTheme='light';try{savedTheme=localStorage.getItem(THEME_STORAGE_KEY)||'
 
 async function load(){
   const [health,summary,sla,alerts,history,jobs,users,queues,hosts,licenses]=await Promise.all([
-    api('/api/health'),api('/api/summary'),api('/api/sla'),api('/api/alerts'),api('/api/history'),api('/api/jobs?limit=1000'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
+    api('/api/health'),api('/api/summary'),api('/api/sla'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
   ]);
   const failed=health.failure;
   $('#healthDot').style.background=health.status==='ok'?'var(--green)':'var(--red)';

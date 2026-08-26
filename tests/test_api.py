@@ -23,7 +23,7 @@ def test_health_and_summary():
     with TestClient(app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.18"
+        assert health.json()["version"] == "0.3.19"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()
@@ -36,7 +36,8 @@ def test_health_and_summary():
         jobs = client.get("/api/jobs").json()
         assert jobs
         assert len(client.get("/api/jobs?limit=1").json()) == 1
-        assert client.get("/api/jobs?limit=1001").status_code == 422
+        assert len(client.get("/api/jobs?limit=1001").json()) == len(jobs)
+        assert client.get("/api/jobs?limit=0").status_code == 422
         assert not {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"} & jobs[0].keys()
         assert summary["totals"]["hosts"] == 8
         queues = client.get("/api/queues").json()
