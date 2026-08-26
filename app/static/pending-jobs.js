@@ -84,21 +84,29 @@
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
     card.setAttribute('aria-label', rows.length ? `查看 ${rows.length} 个等待作业` : '当前没有等待作业');
-    let popover = card.querySelector('.pending-kpi-popover');
-    if (!popover) {
-      popover = document.createElement('div');
-      popover.className = 'pending-kpi-popover';
-      popover.setAttribute('role', 'tooltip');
-      popover.hidden = true;
-      card.append(popover);
-      card.addEventListener('mouseenter', () => { popover.hidden = false; });
-      card.addEventListener('mouseleave', () => { popover.hidden = true; });
-      card.addEventListener('focusin', () => { popover.hidden = false; });
+    let details = kpis.querySelector('.pending-kpi-details');
+    if (!details) {
+      // Keep the preview in the KPI grid flow.  An absolutely positioned
+      // tooltip covered the resource gauges on shorter viewports.
+      details = document.createElement('div');
+      details.className = 'pending-kpi-details';
+      details.setAttribute('role', 'region');
+      details.setAttribute('aria-label', '真实等待作业');
+      details.hidden = true;
+      kpis.append(details);
+      let hideTimer;
+      const show = () => { clearTimeout(hideTimer); details.hidden = false; };
+      const hide = () => { clearTimeout(hideTimer); hideTimer = setTimeout(() => { details.hidden = true; }, 140); };
+      card.addEventListener('mouseenter', show);
+      card.addEventListener('mouseleave', hide);
+      card.addEventListener('focusin', show);
       card.addEventListener('focusout', event => {
-        if (!card.contains(event.relatedTarget)) popover.hidden = true;
+        if (!card.contains(event.relatedTarget) && !details.contains(event.relatedTarget)) hide();
       });
+      details.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+      details.addEventListener('mouseleave', hide);
       card.addEventListener('click', event => {
-        if (!event.target.closest('.pending-kpi-popover')) openPendingJobs();
+        if (!event.target.closest('.pending-kpi-details')) openPendingJobs();
       });
       card.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -108,7 +116,7 @@
       });
     }
     const visible = rows.slice(0, 8);
-    popover.innerHTML = `<div class="pending-kpi-popover-head"><strong>真实等待作业（PEND / PSUSP）</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.status || '-')} · ${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small></li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到等待作业</p>'}`;
+    details.innerHTML = `<div class="pending-kpi-details-head"><strong>真实等待作业（PEND / PSUSP）</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.status || '-')} · ${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small></li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到等待作业</p>'}`;
   }
 
   window.renderJobs = function (rows) {
