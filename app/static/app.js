@@ -4,6 +4,12 @@ const api=path=>fetch(path,{credentials:'same-origin'}).then(async r=>{const bod
 const pct=(a,b)=>b?Math.round(a/b*100):0;
 const PAGE_SIZE=25;
 let allJobs=[],allUsers=[],allLicenses=[],allQueues=[],allHosts=[],historyRows=[],jobPage=1,userPage=1;
+function formatCollectedAt(value){
+  if(!value)return '最近采集：—';
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime()))return `最近采集：${value}`;
+  return `最近采集：${date.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}`;
+}
 function applyTheme(theme){const normalized=theme==='dark'?'dark':'light';document.documentElement.dataset.theme=normalized;try{localStorage.setItem(THEME_STORAGE_KEY,normalized)}catch(error){console.warn('Unable to persist theme preference',error)}const button=$('#themeToggle');if(button){const dark=normalized==='dark';button.textContent=dark?'亮色模式':'深色模式';button.title=dark?'切换到亮色模式':'切换到深色模式';button.setAttribute('aria-pressed',String(dark))}}
 let savedTheme='light';try{savedTheme=localStorage.getItem(THEME_STORAGE_KEY)||'light'}catch(error){console.warn('Unable to read theme preference',error)}applyTheme(savedTheme);
 
@@ -12,6 +18,11 @@ async function load(){
     api('/api/health'),api('/api/summary'),api('/api/sla'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
   ]);
   const failed=health.failure;
+  const lastCollected=$('#lastCollected'),collectedAt=health.snapshot?.collected_at;
+  if(lastCollected){
+    lastCollected.textContent=formatCollectedAt(collectedAt);
+    lastCollected.title=collectedAt?`原始时间：${collectedAt}`:'尚未完成采集';
+  }
   $('#healthDot').style.background=health.status==='ok'?'var(--green)':'var(--red)';
   const partial=health.snapshot?.status==='partial';
   $('#healthText').textContent=health.status==='ok'?'采集正常':failed?`${partial?'部分采集异常':'采集异常'} · ${failed.component}`:'采集异常';
