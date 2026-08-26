@@ -312,7 +312,9 @@ stop_pid() {
 wait_health() {
   local url="http://127.0.0.1:${CADFLOW_PORT:-$PORT}/api/health"
   for _ in $(seq 1 "$HEALTH_TIMEOUT"); do
-    if curl --fail --silent "$url" >/dev/null 2>&1; then
+    # Always bound each probe.  A listening but wedged uvicorn process must
+    # not leave the installer blocked forever on curl's default timeout.
+    if curl --connect-timeout 1 --max-time 3 --fail --silent "$url" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -322,7 +324,7 @@ wait_health() {
 
 running_version() {
   local url="http://127.0.0.1:${CADFLOW_PORT:-$PORT}/api/health" body
-  body=$(curl --fail --silent "$url" 2>/dev/null || true)
+  body=$(curl --connect-timeout 1 --max-time 3 --fail --silent "$url" 2>/dev/null || true)
   [[ -n "$body" ]] || { printf '%s\n' "unknown"; return 0; }
   printf '%s' "$body" | "$VENV_PYTHON" -c 'import json, sys; print(json.load(sys.stdin).get("version", "unknown"))' 2>/dev/null || printf '%s\n' "unknown"
 }
@@ -348,6 +350,7 @@ if [[ -n "$OLD_PID" ]]; then
   stop_pid "$OLD_PID" || fail "existing CADFlow process $OLD_PID did not stop"
 fi
 
+echo "Starting CADFlow and waiting for health check ..."
 # Do not let the long-running server inherit the install lock.  Otherwise the
 # next manual upgrade would see the healthy server as an active installer.
 nohup bash "$APP_DIR/deploy/cadflow-serve" 9>&- >>"$LOG_FILE" 2>&1 &
