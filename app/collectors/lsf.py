@@ -173,11 +173,17 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
     for values in lines[header_index + 1 :]:
         if len(values) < len(headers):
             # Some older ``lsload -w`` builds omit an unavailable final
-            # index instead of printing ``-``.  Keep the host and expose the
-            # missing metric as unknown rather than losing the whole row.
+            # index instead of printing ``-``.  A second legacy quirk is that
+            # the fixed-width ``it`` column can overflow into ``tmp`` (for
+            # example ``274810648G`` means ``it=2748`` and ``tmp=10648G``).
+            # Repair that known adjacent pair before falling back to an
+            # unknown trailing metric, so the later swp/mem values remain
+            # aligned.
             if delimiter is None and len(values) == len(headers) - 1:
+                values = _repair_lsload_row(values, headers)
+            if len(values) < len(headers):
                 values = [*values, "-"]
-            else:
+            if len(values) != len(headers):
                 continue
         if len(values) > len(headers):
             continue
@@ -195,6 +201,30 @@ def parse_lsload(text: str) -> dict[str, dict[str, float]]:
             "free_swap_mb": _number(row["swp"]),
         }
     return result
+
+
+def _repair_lsload_row(values: list[str], headers: list[str]) -> list[str]:
+    """Repair one missing field in a whitespace-delimited ``lsload`` row.
+
+    Legacy LSF clients format ``it`` with a narrow fixed-width column.  When
+    the following ``tmp`` value is also wide, the separator disappears and
+    the two values become one token (``274810648G``).  The header allocates
+    four characters to ``it``; split that token at the legacy boundary only
+    when the suffix is a valid storage quantity.  Other short rows are left
+    untouched and will expose the missing trailing field as unknown.
+    """
+    try:
+        idle_index = headers.index("it")
+        tmp_index = headers.index("tmp")
+    except ValueError:
+        return values
+    if tmp_index != idle_index + 1 or idle_index >= len(values):
+        return values
+    token = values[idle_index]
+    match = re.fullmatch(r"(\d{4})(\d+(?:\.\d+)?[KMGT])", token, re.IGNORECASE)
+    if not match:
+        return values
+    return [*values[:idle_index], match.group(1), match.group(2), *values[idle_index + 1 :]]
 
 
 def parse_lshosts(text: str) -> dict[str, dict[str, float]]:

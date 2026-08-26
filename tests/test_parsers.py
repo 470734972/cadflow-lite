@@ -55,14 +55,14 @@ def test_parse_lsload_explicit_delimiter_keeps_unknown_values():
     }
 
 
-def test_parse_lsload_legacy_short_row_is_not_dropped():
+def test_parse_lsload_legacy_short_row_repairs_merged_idle_and_tmp_values():
     loads = parse_lsload(
         "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\n"
         "lg12 ok 0.0 0.0 0.3 0% 0.0 0 186510648G 128G 995.5G\n"
     )
-    assert loads["lg12"]["free_tmp_mb"] == 131072
-    assert loads["lg12"]["free_swap_mb"] == 1019392
-    assert loads["lg12"]["free_mem_mb"] == 0
+    assert loads["lg12"]["free_tmp_mb"] == 10648 * 1024
+    assert loads["lg12"]["free_swap_mb"] == 131072
+    assert loads["lg12"]["free_mem_mb"] == 995.5 * 1024
 
 
 def test_parse_lshosts_total_memory():
