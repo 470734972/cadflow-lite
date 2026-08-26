@@ -18,7 +18,7 @@ from .collectors.base import Collector
 from .auth import SESSION_COOKIE, SESSION_TTL_SECONDS, create_session, revoke_session, valid_session, verify_password
 from .config import RuntimeConfig, settings
 from .db import Database
-from .services import CollectionService, build_alerts, build_sla, build_summary
+from .services import PENDING_STATUSES, CollectionService, build_alerts, build_sla, build_summary
 
 
 class SetupCollector(Collector):
@@ -147,7 +147,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.20", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.21", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -277,7 +277,11 @@ def jobs(
     """
     rows = db.latest_rows("jobs", runtime.config.cluster_name)
     if status:
-        rows = [row for row in rows if row["status"].lower() == status.lower()]
+        requested_status = status.upper()
+        if requested_status == "PEND":
+            rows = [row for row in rows if row["status"].upper() in PENDING_STATUSES]
+        else:
+            rows = [row for row in rows if row["status"].upper() == requested_status]
     if user:
         rows = [row for row in rows if row["user"].lower() == user.lower()]
     if queue:
@@ -307,7 +311,7 @@ def users() -> list[dict[str, Union[int, str]]]:
         if status == "RUN":
             row["running_jobs"] += 1
             row["running_slots"] += slots
-        elif status == "PEND":
+        elif status in PENDING_STATUSES:
             row["pending_jobs"] += 1
         elif status == "EXIT":
             row["exit_jobs"] += 1

@@ -1,4 +1,4 @@
-// Queue summary shortcut: show the real PEND rows collected by bjobs.
+// Queue summary shortcut: show the real waiting rows collected by bjobs.
 (function () {
   const summary = document.querySelector('#queueSummary');
   const baseRenderQueues = window.renderQueues;
@@ -58,7 +58,7 @@
   }[char]));
 
   function pendingRows() {
-    return allJobs.filter(job => String(job.status || '').toUpperCase() === 'PEND')
+    return allJobs.filter(job => ['PEND', 'PSUSP'].includes(String(job.status || '').toUpperCase()))
       .sort((a, b) => String(b.submit_time || '').localeCompare(String(a.submit_time || '')));
   }
 
@@ -108,7 +108,7 @@
       });
     }
     const visible = rows.slice(0, 8);
-    popover.innerHTML = `<div class="pending-kpi-popover-head"><strong>真实 PEND 作业</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small></li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到 PEND 作业</p>'}`;
+    popover.innerHTML = `<div class="pending-kpi-popover-head"><strong>真实等待作业（PEND / PSUSP）</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.status || '-')} · ${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small></li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到等待作业</p>'}`;
   }
 
   window.renderJobs = function (rows) {

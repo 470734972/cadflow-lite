@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.20">
-  <link rel="stylesheet" href="/static/style.css?v=0.3.20">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.21">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.21">
 </head>
 <body>
   <aside class="sidebar">
@@ -32,7 +32,7 @@
       <button class="nav" data-view="config"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg></span>配置</button>
     </nav>
     <div class="side-status"><span id="healthDot"></span><div><b id="healthText">连接中</b><small id="modeText">—</small><small id="healthDetail">正在读取最近一次采集结果</small></div></div>
-    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.20</span></div>
+    <div class="version-info" aria-label="Ncc CAD Flow 版本">Ncc CAD Flow <span>v0.3.21</span></div>
   </aside>
   <main>
     <header><div><h1 id="pageTitle">集群运行总览</h1><p id="subtitle">计算资源、作业与 EDA License 统一观测</p></div><div class="header-actions"><button id="themeToggle" type="button" aria-pressed="false" title="切换到深色模式">深色模式</button><button id="refreshBtn">刷新数据</button></div></header>
@@ -51,7 +51,7 @@
       <article class="panel"><div class="panel-title history-heading"><div><h2>队列作业趋势</h2><small class="history-subtitle">运行中与等待中的作业数量，按采集时间展示</small></div><div class="history-legend" aria-label="图例"><span><i class="legend-dot running"></i>运行中 RUN</span><span><i class="legend-dot pending"></i>等待中 PEND</span><em>最近 8 次采集</em></div></div><div class="history-chart-wrap"><canvas id="historyChart" height="230" role="img" aria-label="队列运行中和等待中作业数量趋势"></canvas><div id="historyEmpty" class="history-empty" hidden>暂无历史采集数据</div></div></article>
     </section>
 
-    <section id="jobs" class="view"><article class="panel"><div class="table-controls-heading"><div><h2>最近作业</h2><small>按作业、用户、队列和节点筛选当前采集快照；每页显示 25 条。</small></div><strong id="jobResultCount">0 / 0 个作业</strong></div><div class="table-filter-grid job-filter-grid"><label>关键字<input id="jobSearch" type="search" placeholder="作业名、用户或项目" autocomplete="off"></label><label>状态<select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option>PEND</option><option>EXIT</option><option>DONE</option></select></label><label>队列<input id="jobQueue" type="search" placeholder="队列名称" autocomplete="off"></label><label>节点<input id="jobNode" type="search" placeholder="提交或执行节点" autocomplete="off"></label><label>排序<select id="jobSort"><option value="submit_time">提交时间（新到旧）</option><option value="job_id">Job ID（大到小）</option><option value="slots">Slots（多到少）</option></select></label><button id="jobReset" class="secondary-button" type="button">重置筛选</button></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>作业名称</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>提交节点</th><th>执行节点</th><th>提交时间</th><th>Slots</th></tr></thead><tbody id="jobRows"></tbody></table></div><div id="jobPagination" class="pagination" aria-label="作业分页"></div></article></section>
+    <section id="jobs" class="view"><article class="panel"><div class="table-controls-heading"><div><h2>最近作业</h2><small>按作业、用户、队列和节点筛选当前采集快照；每页显示 25 条。</small></div><strong id="jobResultCount">0 / 0 个作业</strong></div><div class="table-filter-grid job-filter-grid"><label>关键字<input id="jobSearch" type="search" placeholder="作业名、用户或项目" autocomplete="off"></label><label>状态<select id="jobStatus"><option value="">全部状态</option><option>RUN</option><option value="PEND">等待（PEND / PSUSP）</option><option>EXIT</option><option>DONE</option></select></label><label>队列<input id="jobQueue" type="search" placeholder="队列名称" autocomplete="off"></label><label>节点<input id="jobNode" type="search" placeholder="提交或执行节点" autocomplete="off"></label><label>排序<select id="jobSort"><option value="submit_time">提交时间（新到旧）</option><option value="job_id">Job ID（大到小）</option><option value="slots">Slots（多到少）</option></select></label><button id="jobReset" class="secondary-button" type="button">重置筛选</button></div><div class="table-wrap"><table><thead><tr><th>Job ID</th><th>作业名称</th><th>用户</th><th>项目</th><th>状态</th><th>队列</th><th>提交节点</th><th>执行节点</th><th>提交时间</th><th>Slots</th></tr></thead><tbody id="jobRows"></tbody></table></div><div id="jobPagination" class="pagination" aria-label="作业分页"></div></article></section>
     <section id="users" class="view"><article class="panel"><div class="table-controls-heading"><div><h2>用户资源使用</h2><small>按当前采集快照聚合 LSF 作业；每页显示 25 条。</small></div><strong id="userResultCount">0 / 0 位用户</strong></div><div class="table-filter-grid user-filter-grid"><label>用户名<input id="userSearch" type="search" placeholder="输入用户名" autocomplete="off"></label><label>当前活动<select id="userActivityFilter"><option value="">全部用户</option><option value="running">有运行作业</option><option value="pending">有等待作业</option><option value="exit">有异常退出</option><option value="idle">当前空闲</option></select></label><label>排序<select id="userSort"><option value="user">用户名</option><option value="running_jobs">运行作业最多</option><option value="pending_jobs">等待作业最多</option><option value="exit_jobs">异常退出最多</option><option value="running_slots">运行 Slots 最多</option></select></label><button id="userReset" class="secondary-button" type="button">重置筛选</button></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>运行作业</th><th>等待作业</th><th>异常退出</th><th>运行 Slots</th><th>全部 Slots</th></tr></thead><tbody id="userRows"></tbody></table></div><div id="userPagination" class="pagination" aria-label="用户分页"></div></article></section>
     <section id="queues" class="view">
       <article class="panel queue-dashboard">
@@ -135,8 +135,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js?v=0.3.20"></script>
-  <script src="/static/pending-jobs.js?v=0.3.20"></script>
-  <script src="/static/table-sorting.js?v=0.3.20"></script>
+  <script src="/static/app.js?v=0.3.21"></script>
+  <script src="/static/pending-jobs.js?v=0.3.21"></script>
+  <script src="/static/table-sorting.js?v=0.3.21"></script>
 </body>
 </html>

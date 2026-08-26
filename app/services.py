@@ -9,6 +9,12 @@ from .collectors.base import Collector
 from .db import Database
 
 
+# LSF counts jobs suspended while pending (PSUSP) in queue PEND totals. Treat
+# both states as waiting for dashboard filters and aggregate counters, while
+# preserving the original status in each job row.
+PENDING_STATUSES = frozenset({"PEND", "PSUSP"})
+
+
 class CollectionService:
     def __init__(
         self,
@@ -84,7 +90,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
         "snapshot": db.snapshot_status(cluster),
         "totals": {
             "jobs": len(jobs), "running_jobs": len(running_jobs),
-            "pending_jobs": sum(1 for job in jobs if job["status"] == "PEND"),
+            "pending_jobs": sum(1 for job in jobs if job["status"].upper() in PENDING_STATUSES),
             "exit_jobs": sum(1 for job in jobs if job["status"] == "EXIT"),
             "hosts": len(hosts), "unavailable_hosts": sum(1 for host in hosts if host["status"].lower() not in {"ok", "closed_full"}),
             "running_slots": running_slots,

@@ -23,7 +23,7 @@ def test_health_and_summary():
     with TestClient(app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.20"
+        assert health.json()["version"] == "0.3.21"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()
@@ -82,6 +82,27 @@ def test_summary_uses_host_capacity_when_lsf_queues_are_unlimited():
     assert summary["totals"]["max_slots"] == 4
     assert summary["totals"]["free_mem_mb"] == 3072
     assert summary["efficiency"]["slot_pct"] == 100
+
+
+def test_pending_summary_includes_pending_suspended_jobs():
+    class FakeDb:
+        def latest_rows(self, table, cluster):
+            rows = {
+                "jobs": [
+                    {"status": "PEND", "slots": 1},
+                    {"status": "PSUSP", "slots": 1},
+                ],
+                "queues": [],
+                "hosts": [],
+                "licenses": [],
+            }
+            return rows[table]
+
+        def snapshot_status(self, cluster):
+            return None
+
+    summary = build_summary(FakeDb(), "eda_cluster")
+    assert summary["totals"]["pending_jobs"] == 2
 
 
 def test_sla_keeps_lsf_available_when_only_flexnet_is_partial():
