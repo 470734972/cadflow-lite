@@ -306,6 +306,15 @@ stop_pid() {
     kill -0 "$pid" 2>/dev/null || return 0
     sleep 0.5
   done
+  # The PID was validated by read_pid (numeric, alive, and running
+  # app.main:app).  If the graceful shutdown is stuck, terminate only this
+  # recorded CADFlow process so an upgrade cannot leave port 8080 occupied.
+  echo "CADFlow process $pid did not stop after TERM; sending KILL to the recorded CADFlow PID" >&2
+  kill -KILL "$pid" 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.5
+  done
   return 1
 }
 
