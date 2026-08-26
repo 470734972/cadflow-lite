@@ -22,7 +22,7 @@ class ParseError(ValueError):
 class SafeRunner:
     """Run only the fixed, read-only commands used by the LSF collector."""
 
-    ALLOWED = {"bjobs", "bqueues", "bhosts", "lshosts", "lsload", "lmstat"}
+    ALLOWED = {"bjobs", "bqueues", "bhosts", "bmgroup", "lshosts", "lsload", "lmstat"}
 
     def __init__(self, timeout: int = 20, lsf_bin_dir: Optional[Path] = None, lmstat_path: Optional[Path] = None, extra_env: Optional[Mapping[str, str]] = None):
         self.timeout = timeout
@@ -221,6 +221,35 @@ def parse_bqueues_hosts(text: str) -> dict[str, str]:
         hosts_match = re.match(r"^HOSTS?\s*:\s*(.*?)\s*$", line, re.I)
         if current and hosts_match:
             result[current] = hosts_match.group(1).strip()
+    return result
+
+
+def parse_bmgroup_hosts(text: str) -> dict[str, list[str]]:
+    """Parse recursively expanded host groups from ``bmgroup -r -w``.
+
+    LSF prints host groups as a two-column whitespace table.  Host groups are
+    commonly written with a leading slash (``/gpu``); the normalizer in the
+    collector handles both that form and the trailing slash shown by some
+    ``bqueues -l`` versions.
+    """
+    result: dict[str, list[str]] = {}
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if re.match(r"^GROUP_NAME\s+HOSTS(?:\s|$)", line, re.I):
+            continue
+        match = re.match(r"^(\S+)\s+(.*?)\s*$", line)
+        if not match:
+            continue
+        group = match.group(1).strip().strip("/")
+        if not group:
+            continue
+        members = []
+        for token in re.split(r"[\s,]+", match.group(2).strip("() ")):
+            token = token.strip("{},()")
+            if token and token not in {"-", "all", "allremote"}:
+                members.append(token.lstrip("+-"))
+        if members:
+            result[group] = list(dict.fromkeys(members))
     return result
 
 
@@ -470,6 +499,12 @@ class LsfCollector(Collector):
             # Queue host membership is optional enrichment. Older/site-specific
             # clients may not expose the long queue description.
             host_specs = {}
+        try:
+            group_hosts = parse_bmgroup_hosts(self.runner.run(["bmgroup", "-r", "-w"]))
+        except (CommandError, ParseError):
+            # Host-group expansion is optional. Keep the configured group name
+            # visible when bmgroup is unavailable instead of inventing hosts.
+            group_hosts = {}
 
         def queue_hosts(name: str) -> list[str]:
             spec = host_specs.get(name, "").strip()
@@ -478,7 +513,15 @@ class LsfCollector(Collector):
             tokens = [token.strip("{},") for token in re.split(r"[\s,]+", spec) if token.strip("{},")]
             if any(token.lower() in {"all", "allhosts"} for token in tokens):
                 return list(host_names or [])
-            return tokens
+            expanded: list[str] = []
+            for token in tokens:
+                group_key = token.strip("/@")
+                members = group_hosts.get(group_key)
+                if members:
+                    expanded.extend(members)
+                else:
+                    expanded.append(token)
+            return list(dict.fromkeys(expanded))
 
         return [{
             "name": row["QUEUE_NAME"], "status": row["STATUS"], "max_slots": int(_number(row["MAX"])),

@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -43,6 +43,12 @@ def test_parse_bqueues_hosts():
     assert parse_bqueues_hosts(
         "QUEUE: normal\n  HOSTS:  all\n\nQUEUE: gpu\n  HOSTS:  rd01 rd02\n"
     ) == {"normal": "all", "gpu": "rd01 rd02"}
+
+
+def test_parse_bmgroup_hosts_expands_recursive_members():
+    assert parse_bmgroup_hosts(
+        "GROUP_NAME    HOSTS\n/dy           rd01 rd02\n/gpu          rd03\n"
+    ) == {"dy": ["rd01", "rd02"], "gpu": ["rd03"]}
 
 
 def test_parse_pipe_table_allows_pipes_in_lsf_job_name():
@@ -149,7 +155,9 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
             if argv[0] == "bjobs" and "-p" in argv[1:]:
                 return "2|bob|PEND|normal|login02|-|waiting_job|2026-07-22T10:31:00+00:00|1|-|-|-\n"
             if argv == ["bqueues", "-l"]:
-                return "QUEUE: normal\n  HOSTS:  compute01\n"
+                return "QUEUE: normal\n  HOSTS:  /dy/\n"
+            if argv == ["bmgroup", "-r", "-w"]:
+                return "GROUP_NAME HOSTS\n/dy compute01 compute02\n"
             outputs = {
                 "bjobs": "1|alice|RUN|normal|login01|compute01|vcs_compile_top|2026-07-22T10:30:00+00:00|8|12G|01:00:00|orion\n",
                 "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - 5 0.5 2 - 11 3 8 0 0\n",
@@ -167,7 +175,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["queues"][0]["per_user_slots"] == 5
     assert payload["queues"][0]["per_processor_slots"] == 0.5
     assert payload["queues"][0]["per_host_slots"] == 2
-    assert payload["queues"][0]["host_names"] == '["compute01"]'
+    assert payload["queues"][0]["host_names"] == '["compute01", "compute02"]'
     assert payload["jobs"][0]["submit_host"] == "login01"
     assert payload["jobs"][0]["job_name"] == "vcs_compile_top"
     assert any(job["status"] == "PEND" for job in payload["jobs"])
@@ -190,6 +198,8 @@ def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():
             return {command: f"/path/to/lsf/bin/{command}" for command in commands}
 
         def run(self, argv):
+            if argv[0] == "bmgroup":
+                raise CommandError("bmgroup is unavailable")
             outputs = {
                 "bjobs": "",
                 "bqueues": "QUEUE_NAME PRIO STATUS MAX JL/U JL/P JL/H NJOBS PEND RUN SUSP RSV\nnormal 30 Open:Active - - - - 0 0 0 0 0\n",
