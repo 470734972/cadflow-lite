@@ -116,7 +116,7 @@
       });
     }
     const visible = rows.slice(0, 8);
-    details.innerHTML = `<div class="pending-kpi-details-head"><strong>真实等待作业（PEND / PSUSP）</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.status || '-')} · ${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small></li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到等待作业</p>'}`;
+    details.innerHTML = `<div class="pending-kpi-details-head"><strong>真实等待作业（PEND / PSUSP）</strong><small>${rows.length} 个</small></div>${visible.length ? `<ul>${visible.map(job => `<li><strong>#${escapeHtml(job.job_id)}</strong><span>${escapeHtml(job.job_name || '-')}</span><small>${escapeHtml(job.status || '-')} · ${escapeHtml(job.user || '-')} · ${escapeHtml(job.queue || '-')} · 提交 ${escapeHtml(job.submit_host || '-')}</small>${job.pending_reason ? `<small class="pending-reason-text" title="${escapeHtml(job.pending_reason)}">原因：${escapeHtml(job.pending_reason)}</small>` : ''}</li>`).join('')}</ul>${rows.length > visible.length ? `<p>还有 ${rows.length - visible.length} 个，点击卡片查看全部</p>` : '<p>点击卡片查看作业明细</p>'}` : '<p class="pending-kpi-empty">当前没有采集到等待作业</p>'}`;
   }
 
   window.renderJobs = function (rows) {

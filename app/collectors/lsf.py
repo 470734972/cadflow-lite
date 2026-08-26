@@ -133,6 +133,65 @@ def parse_pipe_table(text: str, columns: list[str], embedded_delimiter_index: Op
     return rows
 
 
+def parse_pending_reasons(text: str) -> dict[str, str]:
+    """Extract PEND/PSUSP explanations from the portable ``bjobs -p`` output.
+
+    Legacy LSF prints a pending job row followed by one or more indented reason
+    lines (for example, a per-user slot limit).  Newer clients may use the
+    detailed ``bjobs -l`` spelling instead, so labelled ``PENDING REASONS``
+    blocks are accepted as well.  Unknown or unrelated lines are ignored.
+    """
+    reasons: dict[str, list[str]] = {}
+    current: Optional[str] = None
+    detailed = False
+    capture_detail = False
+
+    def add_reason(job_id: str, value: str) -> None:
+        value = re.sub(r"^\s*(?:pending\s+reasons?|reason)\s*:\s*", "", value, flags=re.I).strip()
+        if not value or value in {"-", "N/A"}:
+            return
+        bucket = reasons.setdefault(job_id, [])
+        if value not in bucket:
+            bucket.append(value)
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            current = None
+            detailed = False
+            capture_detail = False
+            continue
+        if line.upper().startswith(("JOBID ", "NO UNFINISHED JOB", "NO MATCHING JOB", "NO JOB FOUND")):
+            continue
+
+        detail_match = re.match(r"^Job\s+<(?P<job_id>\d+)>", line, re.I)
+        if detail_match:
+            current = detail_match.group("job_id")
+            detailed = True
+            capture_detail = False
+            continue
+
+        row_match = re.match(r"^(?P<job_id>\d+)\s+\S+\s+(?P<status>PEND|PSUSP)\b", line, re.I)
+        if row_match:
+            current = row_match.group("job_id")
+            detailed = False
+            capture_detail = True
+            continue
+        if not current:
+            continue
+
+        if detailed:
+            if re.search(r"pending\s+reasons?\s*:", line, re.I):
+                capture_detail = True
+                add_reason(current, line)
+            elif capture_detail and (line.startswith(">") or re.match(r"^(?:User has reached|Job was suspended|Not enough|Waiting for|No available|The queue|The host|License)", line, re.I)):
+                add_reason(current, line.lstrip("> "))
+        else:
+            add_reason(current, line)
+
+    return {job_id: " ".join(values) for job_id, values in reasons.items() if values}
+
+
 def parse_whitespace_table(text: str, required: set[str]) -> list[dict[str, str]]:
     """Parse the standard, whitespace-delimited LSF table formats used by 10.1.0.0."""
     lines = [line.split() for line in text.splitlines() if line.strip()]
@@ -348,14 +407,25 @@ class LsfCollector(Collector):
         # Some older LSF installations do not include pending jobs in the
         # custom ``bjobs -a -o`` result even though ``bjobs -p -u all`` does.
         # Only issue the extra read-only query when the full result has no
-        # PEND row, and merge by Job ID so a job is never shown twice.
-        if not any(row["status"].upper() == "PEND" for row in parsed_rows):
+        # PEND/PSUSP row, and merge by Job ID so a job is never shown twice.
+        if not any(row["status"].upper() in {"PEND", "PSUSP"} for row in parsed_rows):
             try:
                 # Use the portable ``-p`` form.  Some LSF 10.x clients accept
                 # ``-p0`` as a different option and silently omit pending jobs.
                 pending_output = self.runner.run(["bjobs", "-p", "-u", "all", *format_args])
                 parsed_rows.extend(parse_output(pending_output))
             except (CommandError, ParseError):
+                pass
+
+        pending_reasons: dict[str, str] = {}
+        if any(row["status"].upper() in {"PEND", "PSUSP"} for row in parsed_rows):
+            try:
+                # The plain portable form is supported by legacy LSF 10.1 and
+                # includes the human-readable reason lines after each row.
+                pending_reasons = parse_pending_reasons(self.runner.run(["bjobs", "-p", "-u", "all"]))
+            except (CommandError, ParseError):
+                # Reasons are enrichment only; a transient/unsupported reason
+                # query must not make an otherwise valid collection fail.
                 pass
 
         jobs: dict[str, dict] = {}
@@ -366,7 +436,9 @@ class LsfCollector(Collector):
                 "job_name": row["job_name"], "submit_time": row["submit_time"], "slots": max(1, int(_number(row["slots"], 1))),
                 # LSF max_mem is measured usage, not an rusage[mem] request. Keep request unknown rather than invent it.
                 "requested_mem_mb": 0, "used_mem_mb": _number(row["max_mem"]), "cpu_efficiency": 0,
-                "runtime_seconds": parse_duration_seconds(row["runtime"]), "pending_reason": "", "project": row["project"],
+                "runtime_seconds": parse_duration_seconds(row["runtime"]),
+                "pending_reason": pending_reasons.get(row["job_id"], "") if row["status"].upper() in {"PEND", "PSUSP"} else "",
+                "project": row["project"],
             }
         return list(jobs.values())
 

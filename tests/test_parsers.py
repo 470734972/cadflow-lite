@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lshosts, parse_lsload, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_duration_seconds, parse_lmstat, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -15,6 +15,28 @@ def test_parse_pipe_table():
 def test_pipe_table_rejects_unexpected_lsf_format():
     with pytest.raises(ParseError, match="expected 2 columns"):
         parse_pipe_table("840101|alice|RUN\n", ["job_id", "user"])
+
+
+def test_parse_pending_reasons_from_legacy_bjobs_output():
+    reasons = parse_pending_reasons(
+        "JOBID USER STAT QUEUE FROM_HOST EXEC_HOST JOB_NAME SUBMIT_TIME\n"
+        "68338 gpli PEND ana rd14 - *ftJob2466 Aug 25 19:31\n"
+        "User has reached the per-user job slot limit of the queue (Queue: ana, Limit Name: N/A, Limit Value: 30);\n"
+        "68339 qyxiong PSUSP int ts1 - *NLOAD=ilm Mar 9 11:04\n"
+        "Job was suspended by the user while pending;\n"
+    )
+    assert "68338" in reasons
+    assert "per-user job slot limit" in reasons["68338"]
+    assert reasons["68339"] == "Job was suspended by the user while pending;"
+
+
+def test_parse_pending_reasons_from_detailed_bjobs_output():
+    reasons = parse_pending_reasons(
+        "Job <42>, User <alice>, Status <PEND>\n"
+        "PENDING REASONS:\n"
+        "> Not enough job slots in the queue.\n"
+    )
+    assert reasons == {"42": "Not enough job slots in the queue."}
 
 
 def test_parse_pipe_table_allows_pipes_in_lsf_job_name():
@@ -112,7 +134,13 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
 
         def run(self, argv):
             self.commands.append(argv)
-            if argv[0] == "bjobs" and any(value.startswith("-p") for value in argv[1:]):
+            if argv == ["bjobs", "-p", "-u", "all"]:
+                return (
+                    "JOBID USER STAT QUEUE FROM_HOST EXEC_HOST JOB_NAME SUBMIT_TIME\n"
+                    "2 bob PEND normal login02 - waiting_job Jul 22 10:31\n"
+                    "User has reached the per-user job slot limit of the queue (Queue: normal, Limit Value: 5);\n"
+                )
+            if argv[0] == "bjobs" and "-p" in argv[1:]:
                 return "2|bob|PEND|normal|login02|-|waiting_job|2026-07-22T10:31:00+00:00|1|-|-|-\n"
             outputs = {
                 "bjobs": "1|alice|RUN|normal|login01|compute01|vcs_compile_top|2026-07-22T10:30:00+00:00|8|12G|01:00:00|orion\n",
@@ -134,12 +162,14 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["jobs"][0]["submit_host"] == "login01"
     assert payload["jobs"][0]["job_name"] == "vcs_compile_top"
     assert any(job["status"] == "PEND" for job in payload["jobs"])
+    assert next(job for job in payload["jobs"] if job["job_id"] == "2")["pending_reason"].startswith("User has reached")
     assert payload["hosts"][0]["cpu_pct"] == 72
     assert payload["hosts"][0]["total_mem_mb"] == 262144
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
     assert ["bjobs", "-p", "-u", "all", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
+    assert ["bjobs", "-p", "-u", "all"] in runner.commands
     assert ["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"] in runner.commands
 
 
