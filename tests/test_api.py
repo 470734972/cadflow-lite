@@ -23,7 +23,7 @@ def test_health_and_summary():
     with TestClient(app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.29"
+        assert health.json()["version"] == "0.3.30"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()
