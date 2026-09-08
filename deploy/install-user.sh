@@ -293,7 +293,7 @@ is_cadflow_pid() {
   local pid=$1
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
-  ps -p "$pid" -o args= 2>/dev/null | grep -Fq 'app.main:app' || return 1
+  ps -p "$pid" -o args= 2>/dev/null | grep -Eq 'app\.main:app|deploy/cadflow-serve' || return 1
 }
 
 read_pid() {
@@ -312,7 +312,7 @@ stop_pid() {
     sleep 0.5
   done
   # The PID was validated by read_pid (numeric, alive, and running
-  # app.main:app).  If the graceful shutdown is stuck, terminate only this
+  # CADFlow launcher).  If the graceful shutdown is stuck, terminate only this
   # recorded CADFlow process so an upgrade cannot leave port 8080 occupied.
   if ! is_cadflow_pid "$pid"; then
     echo "Recorded CADFlow PID $pid changed or exited; refusing to send KILL" >&2

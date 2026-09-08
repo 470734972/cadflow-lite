@@ -5,7 +5,7 @@ import hmac
 import subprocess
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -18,7 +18,10 @@ from .collectors.base import Collector
 from .auth import SESSION_COOKIE, SESSION_TTL_SECONDS, create_session, revoke_session, valid_session, verify_password
 from .config import RuntimeConfig, settings
 from .db import Database
-from .services import PENDING_STATUSES, CollectionService, build_alerts, build_sla, build_summary
+from .services import (
+    PENDING_STATUSES, CollectionService, build_alerts_from_rows, build_sla_from_snapshots,
+    build_summary_from_rows,
+)
 
 
 class SetupCollector(Collector):
@@ -33,7 +36,13 @@ class Runtime:
         self.db = database
         self._lock = threading.RLock()
         self._status_lock = threading.Lock()
+        self._data_lock = threading.RLock()
         self._last_snapshot: Optional[dict[str, Any]] = None
+        self._rows: dict[str, list[dict[str, Any]]] = {name: [] for name in ("jobs", "queues", "hosts", "licenses")}
+        self._summary: dict[str, Any] = {}
+        self._alerts: list[dict[str, str]] = []
+        self._history: list[dict[str, Any]] = []
+        self._sla_snapshots: list[dict[str, Any]] = []
         self.config = initial
         self.service = self._make_service(initial)
 
@@ -46,6 +55,44 @@ class Runtime:
             self.db.save_config("runtime", self.config.to_dict())
         with self._status_lock:
             self._last_snapshot = self.db.snapshot_status(self.config.cluster_name)
+        self._load_dashboard_cache()
+
+    def _load_dashboard_cache(self) -> None:
+        """Read SQLite once at startup; normal web requests use only memory."""
+        rows = {name: self.db.latest_rows(name, self.config.cluster_name) for name in self._rows}
+        status = self.snapshot_status()
+        now = datetime.now(timezone.utc)
+        history = self.db.history(self.config.cluster_name, 500)
+        outcomes = self.db.sla_snapshots(self.config.cluster_name, (now - timedelta(hours=24)).isoformat())
+        self._replace_dashboard_cache(rows, status, history, outcomes)
+
+    def _replace_dashboard_cache(
+        self, rows: dict[str, list[dict[str, Any]]], status: Optional[dict[str, Any]],
+        history: list[dict[str, Any]], outcomes: list[dict[str, Any]],
+    ) -> None:
+        defaults = {
+            "jobs": {"submit_host": "", "job_name": "", "submit_time": "", "slots": 1, "requested_mem_mb": 0,
+                     "used_mem_mb": 0, "cpu_efficiency": 0, "runtime_seconds": 0, "pending_reason": "", "project": ""},
+            "queues": {"max_slots": 0, "per_user_slots": 0, "per_processor_slots": 0, "per_host_slots": 0,
+                       "running": 0, "pending": 0, "suspended": 0, "host_names": ""},
+            "hosts": {"max_slots": 0, "running_slots": 0, "cpu_pct": 0, "mem_pct": 0, "total_mem_mb": 0,
+                      "load_1m": 0, "load_15m": 0, "free_mem_mb": 0, "free_tmp_mb": 0, "free_swap_mb": 0},
+            "licenses": {"vendor": "", "total": 0, "used": 0, "expires_at": "", "status": "ok"},
+        }
+        normalized = {
+            name: [{**defaults[name], **row} for row in rows.get(name, [])]
+            for name in self._rows
+        }
+        summary = build_summary_from_rows(
+            self.config.cluster_name, normalized["jobs"], normalized["queues"], normalized["hosts"],
+            normalized["licenses"], status,
+        )
+        with self._data_lock:
+            self._rows = normalized
+            self._summary = summary
+            self._alerts = build_alerts_from_rows(normalized["hosts"], normalized["queues"], normalized["licenses"])
+            self._history = list(history)[-500:]
+            self._sla_snapshots = list(outcomes)[-2000:]
 
     def _make_service(self, config: RuntimeConfig) -> CollectionService:
         if config.mode == "demo":
@@ -88,10 +135,25 @@ class Runtime:
             return {"ok": False, "error": "complete the LSF configuration first", "duration_ms": 0}
         # Keep health state in memory: a DB lock must not make /api/health hang.
         result = self.service.run()
+        payload = result.pop("_payload", None)
         snapshot = result.get("snapshot")
         if snapshot:
             with self._status_lock:
                 self._last_snapshot = snapshot
+            rows = {name: list(payload.get(name, [])) for name in self._rows} if payload else self._rows
+            summary = build_summary_from_rows(
+                self.config.cluster_name, rows["jobs"], rows["queues"], rows["hosts"], rows["licenses"], snapshot,
+            )
+            history_row = {
+                "collected_at": snapshot["collected_at"], "running": summary["totals"]["running_jobs"],
+                "pending": summary["totals"]["pending_jobs"], "cpu_pct": summary["efficiency"]["cpu_pct"],
+                "mem_pct": summary["efficiency"]["mem_pct"] or 0,
+            }
+            outcome = {key: snapshot.get(key, "") for key in ("collected_at", "status", "error", "duration_ms")}
+            with self._data_lock:
+                history = [*self._history, history_row][-500:]
+                outcomes = [*self._sla_snapshots, outcome][-2000:]
+            self._replace_dashboard_cache(rows, snapshot, history, outcomes)
         elif not result.get("ok"):
             with self._status_lock:
                 self._last_snapshot = {
@@ -113,6 +175,31 @@ class Runtime:
                 "collected_at": datetime.now(timezone.utc).isoformat(),
                 "status": "error", "duration_ms": 0, "error": error[:1000],
             }
+
+    def rows(self, table: str) -> list[dict[str, Any]]:
+        with self._data_lock:
+            return list(self._rows.get(table, []))
+
+    def summary(self) -> dict[str, Any]:
+        with self._data_lock:
+            return dict(self._summary)
+
+    def alerts(self) -> list[dict[str, str]]:
+        with self._data_lock:
+            return list(self._alerts)
+
+    def history(self, limit: int) -> list[dict[str, Any]]:
+        with self._data_lock:
+            return list(self._history[-limit:])
+
+    def sla(self) -> dict[str, Any]:
+        with self._data_lock:
+            snapshots = list(self._sla_snapshots)
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        return build_sla_from_snapshots(
+            [snapshot for snapshot in snapshots if snapshot["collected_at"] >= cutoff],
+            self.config.collect_interval_seconds,
+        )
 
 
 settings.validate()
@@ -180,7 +267,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.31", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.32", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -285,13 +372,13 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/summary")
 def summary() -> dict[str, Any]:
-    return build_summary(db, runtime.config.cluster_name)
+    return runtime.summary()
 
 
 @app.get("/api/sla")
 def sla() -> dict[str, Any]:
     """Snapshot-based availability for the dashboard's core read-only collectors."""
-    return build_sla(db, runtime.config.cluster_name, runtime.config.collect_interval_seconds)
+    return runtime.sla()
 
 
 @app.get("/api/jobs")
@@ -308,7 +395,7 @@ def jobs(
     Callers may still provide ``limit`` when they intentionally want a
     smaller response (for example, an external integration or CLI query).
     """
-    rows = db.latest_rows("jobs", runtime.config.cluster_name)
+    rows = runtime.rows("jobs")
     if status:
         requested_status = status.upper()
         if requested_status == "PEND":
@@ -331,7 +418,7 @@ def jobs(
 def users() -> list[dict[str, Union[int, str]]]:
     """Return one current-snapshot utilization row per LSF user."""
     grouped: dict[str, dict[str, Union[int, str]]] = {}
-    for job in db.latest_rows("jobs", runtime.config.cluster_name):
+    for job in runtime.rows("jobs"):
         username = job["user"] or "unknown"
         row = grouped.setdefault(username, {
             "user": username, "total_jobs": 0, "running_jobs": 0, "pending_jobs": 0,
@@ -356,27 +443,27 @@ def users() -> list[dict[str, Union[int, str]]]:
 
 @app.get("/api/queues")
 def queues() -> list[dict]:
-    return db.latest_rows("queues", runtime.config.cluster_name)
+    return runtime.rows("queues")
 
 
 @app.get("/api/hosts")
 def hosts() -> list[dict]:
-    return db.latest_rows("hosts", runtime.config.cluster_name)
+    return runtime.rows("hosts")
 
 
 @app.get("/api/licenses")
 def licenses() -> list[dict]:
-    return db.latest_rows("licenses", runtime.config.cluster_name)
+    return runtime.rows("licenses")
 
 
 @app.get("/api/alerts")
 def alerts() -> list[dict]:
-    return build_alerts(db, runtime.config.cluster_name)
+    return runtime.alerts()
 
 
 @app.get("/api/history")
 def history(limit: int = Query(48, ge=2, le=500)) -> list[dict]:
-    return db.history(runtime.config.cluster_name, limit)
+    return runtime.history(limit)
 
 
 @app.post("/api/collect")
@@ -404,9 +491,9 @@ def refresh_from_web() -> dict[str, Any]:
 
 @app.get("/metrics", response_class=PlainTextResponse)
 def metrics() -> str:
-    summary_data = build_summary(db, runtime.config.cluster_name)
+    summary_data = runtime.summary()
     totals, efficiency = summary_data["totals"], summary_data["efficiency"]
-    sla_data = build_sla(db, runtime.config.cluster_name, runtime.config.collect_interval_seconds)
+    sla_data = runtime.sla()
     lines = [
         "# HELP cadflow_jobs Current jobs by status", "# TYPE cadflow_jobs gauge",
         f'cadflow_jobs{{cluster="{runtime.config.cluster_name}",status="running"}} {totals["running_jobs"]}',
@@ -418,7 +505,7 @@ def metrics() -> str:
         f'cadflow_resource_utilization_pct{{cluster="{runtime.config.cluster_name}",resource="slot"}} {efficiency["slot_pct"]}',
         "# HELP cadflow_collection_fresh Whether the most recent collection is fresh (1) or stale/failed (0)",
         "# TYPE cadflow_collection_fresh gauge",
-        f'cadflow_collection_fresh{{cluster="{runtime.config.cluster_name}"}} {1 if snapshot_freshness(db.snapshot_status(runtime.config.cluster_name))["freshness"] == "fresh" else 0}',
+        f'cadflow_collection_fresh{{cluster="{runtime.config.cluster_name}"}} {1 if snapshot_freshness(runtime.snapshot_status())["freshness"] == "fresh" else 0}',
     ]
     lines += ["# HELP cadflow_collector_availability_pct Snapshot-based collector availability over the last 24 hours", "# TYPE cadflow_collector_availability_pct gauge"]
     lines.extend(

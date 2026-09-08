@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadflow-lite"
-version = "0.3.31"
+version = "0.3.32"
 description = "Lightweight LSF and EDA license observability portal"
 readme = "README.md"
 requires-python = ">=3.9"

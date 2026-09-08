@@ -61,6 +61,9 @@ class CollectionService:
                     "status": "partial" if warnings else "ok", "duration_ms": duration_ms,
                     "error": "; ".join(warnings)[:1000],
                 },
+                # Internal hand-off to Runtime.  Runtime removes this before
+                # returning the result to the HTTP caller.
+                "_payload": payload,
             }
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
@@ -75,11 +78,10 @@ class CollectionService:
             self._run_lock.release()
 
 
-def build_summary(db: Database, cluster: str) -> dict[str, Any]:
-    jobs = db.latest_rows("jobs", cluster)
-    queues = db.latest_rows("queues", cluster)
-    hosts = db.latest_rows("hosts", cluster)
-    licenses = db.latest_rows("licenses", cluster)
+def build_summary_from_rows(
+    cluster: str, jobs: list[dict[str, Any]], queues: list[dict[str, Any]],
+    hosts: list[dict[str, Any]], licenses: list[dict[str, Any]], snapshot: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     running_jobs = [job for job in jobs if job["status"] == "RUN"]
     queue_running_slots = sum(queue["running"] for queue in queues)
     queue_max_slots = sum(queue["max_slots"] for queue in queues)
@@ -97,7 +99,7 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     max_slots = queue_max_slots or host_max_slots
     return {
         "cluster": cluster,
-        "snapshot": db.snapshot_status(cluster),
+        "snapshot": snapshot,
         "totals": {
             "jobs": len(jobs), "running_jobs": len(running_jobs),
             "pending_jobs": sum(1 for job in jobs if job["status"].upper() in PENDING_STATUSES),
@@ -117,23 +119,40 @@ def build_summary(db: Database, cluster: str) -> dict[str, Any]:
     }
 
 
-def build_alerts(db: Database, cluster: str) -> list[dict[str, str]]:
+def build_summary(db: Database, cluster: str) -> dict[str, Any]:
+    return build_summary_from_rows(
+        cluster,
+        db.latest_rows("jobs", cluster), db.latest_rows("queues", cluster),
+        db.latest_rows("hosts", cluster), db.latest_rows("licenses", cluster),
+        db.snapshot_status(cluster),
+    )
+
+
+def build_alerts_from_rows(
+    hosts: list[dict[str, Any]], queues: list[dict[str, Any]], licenses: list[dict[str, Any]],
+) -> list[dict[str, str]]:
     alerts: list[dict[str, str]] = []
-    for host in db.latest_rows("hosts", cluster):
+    for host in hosts:
         if host["status"].lower() not in {"ok", "closed_full"}:
             alerts.append({"severity": "critical", "source": host["name"], "message": f"Host status is {host['status']}"})
         elif host["mem_pct"] >= 90:
             alerts.append({"severity": "warning", "source": host["name"], "message": f"Memory usage is {host['mem_pct']}%"})
-    for queue in db.latest_rows("queues", cluster):
+    for queue in queues:
         if queue["pending"] >= 20:
             alerts.append({"severity": "warning", "source": queue["name"], "message": f"{queue['pending']} jobs are pending"})
-    for item in db.latest_rows("licenses", cluster):
+    for item in licenses:
         ratio = item["used"] / item["total"] if item["total"] else 0
         if ratio >= 0.95:
             alerts.append({"severity": "critical", "source": item["feature"], "message": f"License usage is {ratio:.0%}"})
         elif ratio >= 0.85:
             alerts.append({"severity": "warning", "source": item["feature"], "message": f"License usage is {ratio:.0%}"})
     return alerts
+
+
+def build_alerts(db: Database, cluster: str) -> list[dict[str, str]]:
+    return build_alerts_from_rows(
+        db.latest_rows("hosts", cluster), db.latest_rows("queues", cluster), db.latest_rows("licenses", cluster),
+    )
 
 
 SLA_COMPONENTS = (
@@ -159,17 +178,14 @@ def _component_available(snapshot: dict[str, Any], component: str, markers: tupl
     return status == "partial" and component != "licenses"
 
 
-def build_sla(
-    db: Database,
-    cluster: str,
-    collect_interval_seconds: int,
+def build_sla_from_snapshots(
+    snapshots: list[dict[str, Any]], collect_interval_seconds: int,
     window_hours: int = 24,
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """Build a transparent snapshot-based SLA view for the dashboard."""
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(hours=window_hours)
-    snapshots = db.sla_snapshots(cluster, since.isoformat())
     expected = max(1, int(window_hours * 3600 / max(1, collect_interval_seconds)))
     observed = len(snapshots)
     coverage_pct = round(min(100, observed / expected * 100), 1)
@@ -198,3 +214,14 @@ def build_sla(
             for snapshot in snapshots[-24:]
         ],
     }
+
+
+def build_sla(
+    db: Database, cluster: str, collect_interval_seconds: int,
+    window_hours: int = 24, now: Optional[datetime] = None,
+) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    return build_sla_from_snapshots(
+        db.sla_snapshots(cluster, (now - timedelta(hours=window_hours)).isoformat()),
+        collect_interval_seconds, window_hours=window_hours, now=now,
+    )

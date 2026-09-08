@@ -2,6 +2,68 @@
 set -euo pipefail
 
 APP_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-exec "$APP_DIR/.venv/bin/python" -m uvicorn app.main:app \
-  --host "${CADFLOW_BIND_HOST:-0.0.0.0}" \
-  --port "${CADFLOW_PORT:-8080}"
+PYTHON="$APP_DIR/.venv/bin/python"
+PORT="${CADFLOW_PORT:-8080}"
+INTERVAL="${CADFLOW_WATCHDOG_INTERVAL_SECONDS:-30}"
+FAILURES_LIMIT="${CADFLOW_WATCHDOG_FAILURES:-3}"
+STARTUP_GRACE="${CADFLOW_WATCHDOG_STARTUP_GRACE_SECONDS:-180}"
+child_pid=""
+stopping=0
+
+stop_server() {
+  stopping=1
+  if [[ -n "$child_pid" ]] && kill -0 "$child_pid" 2>/dev/null; then
+    kill -TERM "$child_pid" 2>/dev/null || true
+    wait "$child_pid" 2>/dev/null || true
+  fi
+  exit 0
+}
+trap stop_server TERM INT
+
+while [[ $stopping -eq 0 ]]; do
+  "$PYTHON" -m uvicorn app.main:app \
+    --host "${CADFLOW_BIND_HOST:-0.0.0.0}" \
+    --port "$PORT" &
+  child_pid=$!
+  started=$(date +%s)
+  failures=0
+  echo "CADFlow watchdog: started server PID $child_pid"
+
+  while kill -0 "$child_pid" 2>/dev/null; do
+    # Sleep in short increments so TERM from install-user.sh reaches the trap
+    # promptly instead of waiting for a whole watchdog interval.
+    for ((tick=0; tick<INTERVAL; tick++)); do
+      sleep 1
+    done
+    now=$(date +%s)
+    health=$(curl --connect-timeout 1 --max-time 4 --silent "http://127.0.0.1:$PORT/api/health" 2>/dev/null || true)
+    if [[ "$health" == *'"freshness":"fresh"'* || "$health" == *'"freshness":"partial"'* ]]; then
+      failures=0
+      continue
+    fi
+    # The first collection starts after the configured poll interval; an old
+    # on-disk snapshot alone must not cause a restart during startup grace.
+    if (( now - started < STARTUP_GRACE )); then
+      continue
+    fi
+    failures=$((failures + 1))
+    echo "CADFlow watchdog: health is unavailable or stale ($failures/$FAILURES_LIMIT)" >&2
+    if (( failures >= FAILURES_LIMIT )); then
+      echo "CADFlow watchdog: restarting unresponsive server PID $child_pid" >&2
+      kill -TERM "$child_pid" 2>/dev/null || true
+      for _ in $(seq 1 10); do
+        kill -0 "$child_pid" 2>/dev/null || break
+        sleep 1
+      done
+      if kill -0 "$child_pid" 2>/dev/null; then
+        kill -KILL "$child_pid" 2>/dev/null || true
+      fi
+      break
+    fi
+  done
+  wait "$child_pid" 2>/dev/null || true
+  child_pid=""
+  [[ $stopping -eq 1 ]] && break
+  echo "CADFlow watchdog: server exited; restarting in 2 seconds" >&2
+  sleep 2
+done
