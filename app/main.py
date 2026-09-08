@@ -32,6 +32,8 @@ class Runtime:
     def __init__(self, database: Database, initial: RuntimeConfig):
         self.db = database
         self._lock = threading.RLock()
+        self._status_lock = threading.Lock()
+        self._last_snapshot: Optional[dict[str, Any]] = None
         self.config = initial
         self.service = self._make_service(initial)
 
@@ -42,6 +44,8 @@ class Runtime:
             self.service = self._make_service(self.config)
         else:
             self.db.save_config("runtime", self.config.to_dict())
+        with self._status_lock:
+            self._last_snapshot = self.db.snapshot_status(self.config.cluster_name)
 
     def _make_service(self, config: RuntimeConfig) -> CollectionService:
         if config.mode == "demo":
@@ -82,7 +86,33 @@ class Runtime:
     def collect(self) -> dict[str, Any]:
         if self.config.mode == "setup":
             return {"ok": False, "error": "complete the LSF configuration first", "duration_ms": 0}
-        return self.service.run()
+        # Keep health state in memory: a DB lock must not make /api/health hang.
+        result = self.service.run()
+        snapshot = result.get("snapshot")
+        if snapshot:
+            with self._status_lock:
+                self._last_snapshot = snapshot
+        elif not result.get("ok"):
+            with self._status_lock:
+                self._last_snapshot = {
+                    "cluster": self.config.cluster_name,
+                    "collected_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "error", "duration_ms": result.get("duration_ms", 0),
+                    "error": str(result.get("error", "collection failed")),
+                }
+        return result
+
+    def snapshot_status(self) -> Optional[dict[str, Any]]:
+        with self._status_lock:
+            return dict(self._last_snapshot) if self._last_snapshot else None
+
+    def record_failure(self, error: str) -> None:
+        with self._status_lock:
+            self._last_snapshot = {
+                "cluster": self.config.cluster_name,
+                "collected_at": datetime.now(timezone.utc).isoformat(),
+                "status": "error", "duration_ms": 0, "error": error[:1000],
+            }
 
 
 settings.validate()
@@ -97,7 +127,10 @@ _update_lock = threading.Lock()
 async def collection_loop() -> None:
     while True:
         await asyncio.sleep(runtime.config.collect_interval_seconds)
-        await asyncio.to_thread(runtime.collect)
+        try:
+            await asyncio.to_thread(runtime.collect)
+        except Exception as exc:  # keep one bad collection from killing polling
+            runtime.record_failure(f"collection loop failure: {exc}")
 
 
 def snapshot_freshness(status: Optional[dict]) -> dict[str, Union[int, str]]:
@@ -147,7 +180,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.28", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.29", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -237,7 +270,7 @@ def trigger_update(_: None = Depends(require_config_session)) -> dict[str, Any]:
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    status = db.snapshot_status(runtime.config.cluster_name)
+    status = runtime.snapshot_status()
     freshness = snapshot_freshness(status)
     return {
         "version": app.version,

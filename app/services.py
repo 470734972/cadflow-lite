@@ -56,10 +56,20 @@ class CollectionService:
                 "duration_ms": duration_ms,
                 "warnings": warnings,
                 "cleanup": cleanup,
+                "snapshot": {
+                    "id": snapshot_id, "cluster": self.cluster, "collected_at": collected_at,
+                    "status": "partial" if warnings else "ok", "duration_ms": duration_ms,
+                    "error": "; ".join(warnings)[:1000],
+                },
             }
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
-            self.db.save_failure(self.cluster, collected_at, str(exc), duration_ms)
+            # Recording an error must not itself kill the collection loop when
+            # the database is the failed dependency.
+            try:
+                self.db.save_failure(self.cluster, collected_at, str(exc), duration_ms)
+            except Exception:
+                pass
             return {"ok": False, "error": str(exc), "duration_ms": duration_ms}
         finally:
             self._run_lock.release()

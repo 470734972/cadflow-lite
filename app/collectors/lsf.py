@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import signal
 from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
@@ -59,16 +60,26 @@ class SafeRunner:
         env["LANG"] = "C"
         env.update(self.extra_env)
         try:
-            result = subprocess.run(
-                [executable, *argv[1:]], capture_output=True, text=True, timeout=self.timeout, check=False, env=env
+            process = subprocess.Popen(
+                [executable, *argv[1:]], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                env=env, start_new_session=(os.name == "posix"),
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            try:
+                stdout, stderr = process.communicate(timeout=self.timeout)
+            except subprocess.TimeoutExpired:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:  # pragma: no cover - production collector runs on Linux
+                    process.kill()
+                stdout, stderr = process.communicate()
+                raise CommandError(f"command timed out after {self.timeout}s: {Path(argv[0]).name}")
+        except OSError as exc:
             raise CommandError(str(exc)) from exc
-        if result.returncode != 0:
-            raise CommandError(result.stderr.strip() or f"command exited {result.returncode}")
-        if len(result.stdout) > 10_000_000:
+        if process.returncode != 0:
+            raise CommandError(stderr.strip() or f"command exited {process.returncode}")
+        if len(stdout) > 10_000_000:
             raise CommandError(f"command output exceeds 10 MB: {Path(argv[0]).name}")
-        return result.stdout
+        return stdout
 
 
 def _number(value: str, default: float = 0) -> float:

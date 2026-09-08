@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS licenses (
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
+-- Detailed rows are retained for the current snapshot only.  Historical
+-- dashboard charts use this compact table instead of copying every job row.
+CREATE TABLE IF NOT EXISTS snapshot_metrics (
+    snapshot_id INTEGER PRIMARY KEY,
+    running INTEGER NOT NULL DEFAULT 0,
+    pending INTEGER NOT NULL DEFAULT 0,
+    cpu_pct REAL NOT NULL DEFAULT 0,
+    mem_pct REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_snapshots_cluster_time ON snapshots(cluster, collected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_snapshot ON jobs(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_queues_snapshot ON queues(snapshot_id);
@@ -112,9 +123,12 @@ class Database:
         self._lock = threading.Lock()
 
     def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10, check_same_thread=False)
+        # A dashboard request must fail promptly rather than occupy a Uvicorn
+        # worker indefinitely when an NFS or SQLite lock is unavailable.
+        conn = sqlite3.connect(self.path, timeout=3, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=3000")
         return conn
 
     def initialize(self) -> None:
@@ -179,6 +193,11 @@ class Database:
             self._insert_many(conn, "queues", snapshot_id, payload.get("queues", []))
             self._insert_many(conn, "hosts", snapshot_id, payload.get("hosts", []))
             self._insert_many(conn, "licenses", snapshot_id, payload.get("licenses", []))
+            self._save_metrics(conn, snapshot_id, payload)
+            # Keep a single old detailed snapshot being reclaimed per run.  It
+            # bounds write-lock time even when upgrading an existing large DB;
+            # after the backlog is gone, each new snapshot replaces one old one.
+            self._trim_one_detail_snapshot(conn, cluster, snapshot_id)
             return snapshot_id
 
     def save_failure(self, cluster: str, collected_at: str, error: str, duration_ms: int = 0) -> None:
@@ -200,8 +219,9 @@ class Database:
         ``0`` disables an individual limit. Age cleanup keeps the latest
         snapshot for the cluster. Size cleanup keeps the latest snapshot for
         every cluster so a very small limit cannot make the dashboard empty.
-        SQLite pages are vacuumed only after the size limit is exceeded; age
-        cleanup otherwise checkpoints WAL and lets SQLite reuse freed pages.
+        The live collector never runs VACUUM or a truncating checkpoint:
+        SQLite reuses freed pages for future snapshots, avoiding an exclusive
+        database lock during normal dashboard operation.
         """
         if retention_days < 0 or max_size_mb < 0:
             raise ValueError("cleanup limits must be zero or greater")
@@ -218,52 +238,46 @@ class Database:
                 ).fetchone()
                 latest_cluster_id = int(latest_cluster["id"]) if latest_cluster else 0
                 if cutoff and latest_cluster_id:
-                    cursor = conn.execute(
-                        "DELETE FROM snapshots WHERE cluster=? AND id<>? AND collected_at < ?",
-                        (cluster, latest_cluster_id, cutoff),
-                    )
-                    deleted += max(0, int(cursor.rowcount))
+                    old_ids = [
+                        int(row["id"])
+                        for row in conn.execute(
+                            "SELECT id FROM snapshots WHERE cluster=? AND id<>? AND collected_at < ? "
+                            "ORDER BY id ASC LIMIT 24",
+                            (cluster, latest_cluster_id, cutoff),
+                        ).fetchall()
+                    ]
+                    if old_ids:
+                        placeholders = ",".join("?" for _ in old_ids)
+                        cursor = conn.execute(f"DELETE FROM snapshots WHERE id IN ({placeholders})", old_ids)
+                        deleted += max(0, int(cursor.rowcount))
                 conn.commit()
-
-                if deleted:
-                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                    conn.commit()
 
                 size_bytes = self._database_size_bytes()
                 if max_size_bytes and size_bytes > max_size_bytes:
-                    # Delete in batches, then VACUUM once per batch so the
-                    # physical file size (not just logical free pages) falls.
-                    while size_bytes > max_size_bytes:
-                        latest_ids = [
-                            int(row["id"])
-                            for row in conn.execute(
-                                "SELECT MAX(id) AS id FROM snapshots GROUP BY cluster"
-                            ).fetchall()
-                        ]
-                        if not latest_ids:
-                            break
+                    # Never run VACUUM in the collector path.  It requires an
+                    # exclusive database lock and was able to stall every API.
+                    # Reclaim a small logical batch; SQLite will reuse its pages
+                    # for new snapshots without blocking the live service.
+                    latest_ids = [
+                        int(row["id"])
+                        for row in conn.execute("SELECT MAX(id) AS id FROM snapshots GROUP BY cluster").fetchall()
+                    ]
+                    if latest_ids:
                         placeholders = ",".join("?" for _ in latest_ids)
                         cursor = conn.execute(
                             f"DELETE FROM snapshots WHERE id NOT IN ({placeholders}) "
-                            "AND id IN (SELECT id FROM snapshots ORDER BY id ASC LIMIT 128)",
+                            "AND id IN (SELECT id FROM snapshots ORDER BY id ASC LIMIT 24)",
                             latest_ids,
                         )
-                        batch_deleted = max(0, int(cursor.rowcount))
-                        if not batch_deleted:
-                            break
-                        deleted += batch_deleted
+                        deleted += max(0, int(cursor.rowcount))
                         conn.commit()
-                        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                        conn.commit()
-                        conn.execute("VACUUM")
-                        size_bytes = self._database_size_bytes()
-                else:
                     size_bytes = self._database_size_bytes()
                 return {
                     "deleted_snapshots": deleted,
                     "size_bytes": size_bytes,
                     "retention_days": retention_days,
                     "max_size_mb": max_size_mb,
+                    "maintenance_required": bool(max_size_bytes and size_bytes > max_size_bytes),
                 }
             finally:
                 conn.close()
@@ -300,6 +314,41 @@ class Database:
         sql = f"INSERT INTO {table}(snapshot_id,{','.join(columns)}) VALUES (?,{placeholders})"
         conn.executemany(sql, [[snapshot_id, *[row.get(column) for column in columns]] for row in rows])
 
+    @staticmethod
+    def _save_metrics(conn: sqlite3.Connection, snapshot_id: int, payload: dict[str, Any]) -> None:
+        queues = payload.get("queues", [])
+        hosts = payload.get("hosts", [])
+        jobs = payload.get("jobs", [])
+        running = sum(int(queue.get("running", 0) or 0) for queue in queues)
+        pending = sum(int(queue.get("pending", 0) or 0) for queue in queues)
+        if not queues:
+            running = sum(1 for job in jobs if str(job.get("status", "")).upper() == "RUN")
+            pending = sum(1 for job in jobs if str(job.get("status", "")).upper() in {"PEND", "PSUSP"})
+        cpu_values = [float(host.get("cpu_pct", 0) or 0) for host in hosts]
+        mem_values = [float(host.get("mem_pct", 0) or 0) for host in hosts]
+        conn.execute(
+            "INSERT INTO snapshot_metrics(snapshot_id, running, pending, cpu_pct, mem_pct) VALUES (?, ?, ?, ?, ?)",
+            (snapshot_id, running, pending, sum(cpu_values) / len(cpu_values) if cpu_values else 0,
+             sum(mem_values) / len(mem_values) if mem_values else 0),
+        )
+
+    @staticmethod
+    def _trim_one_detail_snapshot(conn: sqlite3.Connection, cluster: str, current_snapshot_id: int) -> None:
+        row = conn.execute(
+            """
+            SELECT s.id FROM snapshots s
+            WHERE s.cluster=? AND s.id<>?
+              AND EXISTS (SELECT 1 FROM jobs j WHERE j.snapshot_id=s.id)
+            ORDER BY s.id ASC LIMIT 1
+            """,
+            (cluster, current_snapshot_id),
+        ).fetchone()
+        if not row:
+            return
+        old_snapshot_id = int(row["id"])
+        for table in ("jobs", "queues", "hosts", "licenses"):
+            conn.execute(f"DELETE FROM {table} WHERE snapshot_id=?", (old_snapshot_id,))
+
     def latest_snapshot_id(self, cluster: str) -> Optional[int]:
         with self.connect() as conn:
             row = conn.execute(
@@ -331,11 +380,12 @@ class Database:
             rows = conn.execute(
                 """
                 SELECT s.collected_at,
-                       COALESCE((SELECT SUM(running) FROM queues q WHERE q.snapshot_id=s.id), 0) AS running,
-                       COALESCE((SELECT SUM(pending) FROM queues q WHERE q.snapshot_id=s.id), 0) AS pending,
-                       COALESCE((SELECT AVG(cpu_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS cpu_pct,
-                       COALESCE((SELECT AVG(mem_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS mem_pct
+                       COALESCE(m.running, (SELECT SUM(running) FROM queues q WHERE q.snapshot_id=s.id), 0) AS running,
+                       COALESCE(m.pending, (SELECT SUM(pending) FROM queues q WHERE q.snapshot_id=s.id), 0) AS pending,
+                       COALESCE(m.cpu_pct, (SELECT AVG(cpu_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS cpu_pct,
+                       COALESCE(m.mem_pct, (SELECT AVG(mem_pct) FROM hosts h WHERE h.snapshot_id=s.id), 0) AS mem_pct
                 FROM snapshots s
+                LEFT JOIN snapshot_metrics m ON m.snapshot_id=s.id
                 WHERE s.cluster=? AND s.status IN ('ok', 'partial')
                 ORDER BY s.id DESC LIMIT ?
                 """,
