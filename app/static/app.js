@@ -22,6 +22,8 @@ async function load(){
     api('/api/health'),api('/api/summary'),api('/api/sla'),api('/api/alerts'),api('/api/history'),api('/api/jobs'),api('/api/users'),api('/api/queues'),api('/api/hosts'),api('/api/licenses')
   ]);
   const failed=health.failure;
+  const appVersion=$('#appVersion');
+  if(appVersion) appVersion.textContent=health.version?`v${health.version}`:'v—';
   const lastCollected=$('#lastCollected'),collectedAt=health.snapshot?.collected_at;
   if(lastCollected){
     lastCollected.textContent=formatCollectedAt(collectedAt);
