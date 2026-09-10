@@ -62,7 +62,9 @@ class Runtime:
         rows = {name: self.db.latest_rows(name, self.config.cluster_name) for name in self._rows}
         status = self.snapshot_status()
         now = datetime.now(timezone.utc)
-        history = self.db.history(self.config.cluster_name, 500)
+        # Preserve one full day of compact metrics even with a 30-second
+        # collection interval (24 * 60 * 2 = 2880 points).
+        history = self.db.history(self.config.cluster_name, 3000)
         outcomes = self.db.sla_snapshots(self.config.cluster_name, (now - timedelta(hours=24)).isoformat())
         self._replace_dashboard_cache(rows, status, history, outcomes)
 
@@ -91,7 +93,7 @@ class Runtime:
             self._rows = normalized
             self._summary = summary
             self._alerts = build_alerts_from_rows(normalized["hosts"], normalized["queues"], normalized["licenses"])
-            self._history = list(history)[-500:]
+            self._history = list(history)[-3000:]
             self._sla_snapshots = list(outcomes)[-2000:]
 
     def _make_service(self, config: RuntimeConfig) -> CollectionService:
@@ -151,7 +153,7 @@ class Runtime:
             }
             outcome = {key: snapshot.get(key, "") for key in ("collected_at", "status", "error", "duration_ms")}
             with self._data_lock:
-                history = [*self._history, history_row][-500:]
+                history = [*self._history, history_row][-3000:]
                 outcomes = [*self._sla_snapshots, outcome][-2000:]
             self._replace_dashboard_cache(rows, snapshot, history, outcomes)
         elif not result.get("ok"):
@@ -188,9 +190,10 @@ class Runtime:
         with self._data_lock:
             return list(self._alerts)
 
-    def history(self, limit: int) -> list[dict[str, Any]]:
+    def history(self, hours: int = 24, limit: int = 3000) -> list[dict[str, Any]]:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         with self._data_lock:
-            return list(self._history[-limit:])
+            return [row for row in self._history if str(row.get("collected_at", "")) >= cutoff][-limit:]
 
     def sla(self) -> dict[str, Any]:
         with self._data_lock:
@@ -267,7 +270,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.38", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.39", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -462,8 +465,9 @@ def alerts() -> list[dict]:
 
 
 @app.get("/api/history")
-def history(limit: int = Query(48, ge=2, le=500)) -> list[dict]:
-    return runtime.history(limit)
+def history(hours: int = Query(24, ge=1, le=168)) -> list[dict]:
+    """Compact job metrics sampled during the requested recent time window."""
+    return runtime.history(hours=hours)
 
 
 @app.post("/api/collect")
