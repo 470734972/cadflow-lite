@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.36">
-  <link rel="stylesheet" href="/static/style.css?v=0.3.36">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=0.3.37">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.37">
 </head>
 <body>
   <aside class="sidebar">
@@ -69,9 +69,9 @@
         <div id="hostSummary" class="host-summary-grid"></div>
         <div class="queue-dashboard-divider"></div>
         <div class="queue-controls-heading"><div><h3>筛选与排序</h3><small>状态和资源指标均来自最近一次 LSF 采集。</small></div></div>
-        <div class="table-filter-grid host-filter-grid"><label>节点名称<input id="hostSearch" type="search" placeholder="输入节点名称" autocomplete="off"></label><label>所属队列<select id="hostQueueFilter"><option value="">全部队列</option></select></label><label>节点状态<select id="hostStatusFilter"><option value="">全部状态</option><option value="healthy">正常</option><option value="closed_full">已满</option><option value="closed_busy">繁忙</option><option value="closed">其他已关闭</option><option value="unavailable">不可用或不可达</option></select></label><label>当前活动<select id="hostActivityFilter"><option value="">全部节点</option><option value="running">有运行 Slots</option><option value="high_cpu">CPU ≥ 70%</option><option value="high_load">1 分钟负载较高</option></select></label><label>排序<select id="hostSort"><option value="name">节点名称</option><option value="cpu">CPU 使用率最高</option><option value="load">1 分钟负载最高</option><option value="memory">可用内存最少</option><option value="tmp">/tmp 可用最少</option><option value="running_slots">运行 Slots 最多</option></select></label><button id="hostReset" class="secondary-button" type="button">重置筛选</button></div>
+        <div class="table-filter-grid host-filter-grid"><label>节点名称<input id="hostSearch" type="search" placeholder="输入节点名称" autocomplete="off"></label><label>所属队列<select id="hostQueueFilter"><option value="">全部队列</option></select></label><label>节点状态<select id="hostStatusFilter"><option value="">全部状态</option><option value="healthy">正常</option><option value="closed_full">已满</option><option value="closed_busy">繁忙</option><option value="closed">其他已关闭</option><option value="unavailable">不可用或不可达</option></select></label><label>当前活动<select id="hostActivityFilter"><option value="">全部节点</option><option value="running">有运行 Slots</option><option value="high_cpu">CPU ≥ 70%</option><option value="high_load">1 分钟负载较高</option></select></label><label>排序<select id="hostSort"><option value="name">节点名称</option><option value="cpu">CPU 使用率最高</option><option value="memory_pct">内存使用率最高</option><option value="load">1 分钟负载最高</option><option value="memory">可用内存最少</option><option value="tmp">/tmp 可用最少</option><option value="running_slots">运行 Slots 最多</option></select></label><button id="hostReset" class="secondary-button" type="button">重置筛选</button></div>
       </article>
-      <article class="panel host-table-panel"><div class="queue-table-heading"><div><h2>节点明细</h2><small>可用内存、/tmp 和 Swap 均为节点当前可用容量。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="host-table"><thead><tr><th>节点</th><th>状态</th><th>运行 / Slots</th><th>CPU</th><th>负载（1m / 15m）</th><th>可用内存</th><th>/tmp 可用</th><th>Swap 可用</th></tr></thead><tbody id="hostRows"></tbody></table></div></article>
+      <article class="panel host-table-panel"><div class="queue-table-heading"><div><h2>节点明细</h2><small>可用内存、/tmp 和 Swap 均为节点当前可用容量；内存使用率由 LSF 总内存和可用内存计算。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="host-table"><thead><tr><th>节点</th><th>状态</th><th>运行 / Slots</th><th>CPU</th><th>负载（1m / 15m）</th><th>可用内存</th><th>内存使用率</th><th>/tmp 可用</th><th>Swap 可用</th></tr></thead><tbody id="hostRows"></tbody></table></div></article>
     </section>
     <section id="licenses" class="view"><article class="panel"><div class="panel-title"><h2>EDA License 容量</h2><div class="license-filters"><input id="licenseSearch" type="search" placeholder="功能名、Vendor 或服务器" autocomplete="off"><select id="licenseStatus"><option value="">全部 License</option><option value="floating">浮动许可</option><option value="node_locked">节点锁定</option><option value="risk">风险许可</option></select></div></div><div id="licenseRows" class="license-list"></div></article></section>
 
@@ -135,8 +135,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js?v=0.3.36"></script>
-  <script src="/static/pending-jobs.js?v=0.3.36"></script>
-  <script src="/static/table-sorting.js?v=0.3.36"></script>
+  <script src="/static/app.js?v=0.3.37"></script>
+  <script src="/static/pending-jobs.js?v=0.3.37"></script>
+  <script src="/static/table-sorting.js?v=0.3.37"></script>
 </body>
 </html>

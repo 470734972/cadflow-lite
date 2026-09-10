@@ -4,7 +4,7 @@
     ['#jobs table', '#jobSort', { 0: 'job_id', 8: 'submit_time', 9: 'slots' }],
     ['#users table', '#userSort', { 0: 'user', 1: 'running_jobs', 2: 'pending_jobs', 3: 'exit_jobs', 4: 'running_slots' }],
     ['#queues table', '#queueSort', { 0: 'name', 2: 'running', 3: 'per_user_slots', 4: 'pending', 5: 'suspended', 6: 'utilization' }],
-    ['#hosts table', '#hostSort', { 0: 'name', 2: 'running_slots', 3: 'cpu', 4: 'load', 5: 'memory', 6: 'tmp' }],
+    ['#hosts table', '#hostSort', { 0: 'name', 2: 'running_slots', 3: 'cpu', 4: 'load', 5: 'memory', 6: 'memory_pct', 7: 'tmp' }],
   ];
 
   mappings.forEach(([tableSelector, selectSelector, columns]) => {
