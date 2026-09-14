@@ -21,9 +21,13 @@ import app.main as main_module
 
 def test_health_and_summary():
     with TestClient(app) as client:
+        for path in ("/", "/jobs", "/users", "/queues", "/hosts", "/licenses", "/config"):
+            page = client.get(path)
+            assert page.status_code == 200
+            assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.39"
+        assert health.json()["version"] == "0.3.41"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()

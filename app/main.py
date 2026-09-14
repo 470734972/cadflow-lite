@@ -270,7 +270,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.39", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.41", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -517,3 +517,16 @@ def metrics() -> str:
         for item in sla_data["components"]
     )
     return "\n".join(lines) + "\n"
+
+
+# Each dashboard area has a stable address while sharing the same lightweight
+# browser bundle.  This keeps direct links, browser refresh, and bookmarks on
+# the selected area instead of falling back to the overview page.
+FRONTEND_VIEWS = {"jobs", "users", "queues", "hosts", "licenses", "config"}
+
+
+@app.get("/{view_name}", include_in_schema=False)
+def frontend_view(view_name: str) -> FileResponse:
+    if view_name not in FRONTEND_VIEWS:
+        raise HTTPException(status_code=404, detail="page not found")
+    return FileResponse(static_dir / "index.html")
