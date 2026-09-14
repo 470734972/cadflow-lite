@@ -15,7 +15,7 @@ from app.auth import hash_password
 os.environ["CADFLOW_CONFIG_PASSWORD_HASH"] = hash_password("config-pass")
 
 from app.main import app
-from app.services import build_sla, build_summary
+from app.services import build_sla, build_summary, build_summary_from_rows
 import app.main as main_module
 
 
@@ -27,7 +27,7 @@ def test_health_and_summary():
             assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.42"
+        assert health.json()["version"] == "0.3.43"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()
@@ -86,6 +86,20 @@ def test_summary_uses_host_capacity_when_lsf_queues_are_unlimited():
     assert summary["totals"]["max_slots"] == 4
     assert summary["totals"]["free_mem_mb"] == 3072
     assert summary["efficiency"]["slot_pct"] == 100
+
+
+def test_summary_excludes_hosts_without_slots_from_resource_utilization():
+    summary = build_summary_from_rows(
+        "eda_cluster", [], [],
+        [
+            {"status": "ok", "running_slots": 4, "max_slots": 8, "cpu_pct": 80, "mem_pct": 75, "total_mem_mb": 1000, "free_mem_mb": 250},
+            {"status": "ok", "running_slots": 0, "max_slots": 0, "cpu_pct": 0, "mem_pct": 0, "total_mem_mb": 64000, "free_mem_mb": 64000},
+        ], [],
+    )
+    assert summary["efficiency"]["cpu_pct"] == 80
+    assert summary["efficiency"]["mem_pct"] == 75
+    assert summary["totals"]["total_mem_mb"] == 1000
+    assert summary["totals"]["free_mem_mb"] == 250
 
 
 def test_pending_summary_includes_pending_suspended_jobs():

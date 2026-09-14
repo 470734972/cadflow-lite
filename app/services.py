@@ -87,11 +87,15 @@ def build_summary_from_rows(
     queue_max_slots = sum(queue["max_slots"] for queue in queues)
     host_running_slots = sum(host["running_slots"] for host in hosts)
     host_max_slots = sum(host["max_slots"] for host in hosts)
-    total_mem_mb = sum(max(0, float(host.get("total_mem_mb", 0) or 0)) for host in hosts)
-    free_mem_mb = sum(max(0, float(host.get("free_mem_mb", 0) or 0)) for host in hosts)
+    # Login and utility hosts (for example lg*) are reported by LSF but have
+    # no schedulable slots.  Exclude them from cluster resource utilization so
+    # their idle CPU and memory do not dilute the compute-node figures.
+    compute_hosts = [host for host in hosts if float(host.get("max_slots", 0) or 0) > 0]
+    total_mem_mb = sum(max(0, float(host.get("total_mem_mb", 0) or 0)) for host in compute_hosts)
+    free_mem_mb = sum(max(0, float(host.get("free_mem_mb", 0) or 0)) for host in compute_hosts)
     memory_pct = round(max(0, min(100, (total_mem_mb - free_mem_mb) / total_mem_mb * 100)), 1) if total_mem_mb else (
-        round(sum(host["mem_pct"] for host in hosts if host["mem_pct"] >= 0) / len([host for host in hosts if host["mem_pct"] >= 0]), 1)
-        if any(host["mem_pct"] >= 0 for host in hosts) else None
+        round(sum(host["mem_pct"] for host in compute_hosts if host["mem_pct"] >= 0) / len([host for host in compute_hosts if host["mem_pct"] >= 0]), 1)
+        if any(host["mem_pct"] >= 0 for host in compute_hosts) else None
     )
     # An LSF queue MAX of "-" means unlimited and is stored as zero. In that
     # case, hosts are the authoritative physical capacity for the dashboard.
@@ -112,7 +116,7 @@ def build_summary_from_rows(
             "license_risks": sum(1 for item in licenses if item["status"] in {"warning", "critical"}),
         },
         "efficiency": {
-            "cpu_pct": round(sum(host["cpu_pct"] for host in hosts) / len(hosts), 1) if hosts else 0,
+            "cpu_pct": round(sum(host["cpu_pct"] for host in compute_hosts) / len(compute_hosts), 1) if compute_hosts else 0,
             "mem_pct": memory_pct,
             "slot_pct": round(running_slots / max(1, max_slots) * 100, 1),
         },
