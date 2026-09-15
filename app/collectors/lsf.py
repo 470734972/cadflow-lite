@@ -77,6 +77,12 @@ class SafeRunner:
             raise CommandError(str(exc)) from exc
         if process.returncode != 0:
             raise CommandError(stderr.strip() or f"command exited {process.returncode}")
+        # FlexNet builds differ in where they write the status report.  The
+        # interactive shell shows both streams, while the collector used to
+        # parse stdout only; preserve both for lmstat so a valid server report
+        # written to stderr is not mistaken for an empty/unknown result.
+        if Path(argv[0]).name == "lmstat" and stderr.strip():
+            stdout = f"{stdout}\n{stderr}" if stdout.strip() else stderr
         if len(stdout) > 10_000_000:
             raise CommandError(f"command output exceeds 10 MB: {Path(argv[0]).name}")
         return stdout
