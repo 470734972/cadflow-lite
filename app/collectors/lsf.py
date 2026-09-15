@@ -413,7 +413,14 @@ def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, Uni
 
 
 def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict[str, Union[str, int]]:
-    """Parse the compact ``lmstat -s`` service report without enumerating features."""
+    """Parse only the service header of an ``lmstat`` report.
+
+    Some older FlexNet clients do not include the server line in ``lmstat -s``.
+    When that happens the caller retries ``lmstat -a`` but passes this function
+    only the text before ``Feature usage info:``, so Feature inventory is never
+    parsed or persisted.
+    """
+    text = text.split("Feature usage info:", 1)[0]
     server_up = bool(re.search(r"\blicense\s+server\s+UP\b", text, re.I))
     vendor_states = {
         name.lower(): state.upper()
@@ -622,6 +629,14 @@ class LsfCollector(Collector):
             try:
                 output = self.runner.run(["lmstat", "-c", server, "-s"])
                 row = parse_lmstat_server_status(output, server, self.license_vendor)
+                # FlexNet 11.14 (used by some legacy EDA tool bundles) accepts
+                # ``-s`` but omits the "license server UP" header.  Retrying
+                # with the portable ``-a`` form is only a compatibility path:
+                # parse_lmstat_server_status discards Feature usage info and we
+                # still store exactly one health row, never Feature records.
+                if row["expires_at"] == "lmstat did not report license server UP":
+                    legacy_output = self.runner.run(["lmstat", "-a", "-c", server])
+                    row = parse_lmstat_server_status(legacy_output, server, self.license_vendor)
             except CommandError as exc:
                 row = {
                     "server": server, "vendor": self.license_vendor, "feature": "License Server",

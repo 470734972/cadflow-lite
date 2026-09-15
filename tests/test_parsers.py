@@ -135,6 +135,36 @@ def test_parse_lmstat_server_status_marks_down_vendor_critical():
     assert row["expires_at"] == "Vendor daemon DOWN: snpslmd"
 
 
+def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
+    class LicenseRunner:
+        def __init__(self):
+            self.commands = []
+
+        def run(self, argv):
+            self.commands.append(argv)
+            if argv == ["lmstat", "-c", "27000@rd1", "-s"]:
+                return "lmstat status summary is unavailable on this client\n"
+            if argv == ["lmstat", "-a", "-c", "27000@rd1"]:
+                return (
+                    "License server status: 27000@rd1\n"
+                    "  license server UP (MASTER) v11.14\n"
+                    "Vendor daemon status (on rd1):\n"
+                    "  snpslmd: UP v11.14\n"
+                    "Feature usage info:\n"
+                    "Users of SSS:  (Total of 5000 licenses issued; Total of 2 licenses in use)\n"
+                )
+            raise AssertionError(f"unexpected command: {argv}")
+
+    runner = LicenseRunner()
+    rows, warnings = LsfCollector(
+        20, "/path/to/lmstat", ("27000@rd1",), license_vendor="snpslmd", runner=runner
+    )._licenses()
+
+    assert rows == [{"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"}]
+    assert warnings == []
+    assert runner.commands == [["lmstat", "-c", "27000@rd1", "-s"], ["lmstat", "-a", "-c", "27000@rd1"]]
+
+
 def test_collection_failure_detail_identifies_failed_data_source():
     assert collection_failure_detail({"status": "error", "error": "required command is not executable: /path/to/lmstat"}) == {
         "component": "FlexNet License", "message": "required command is not executable: /path/to/lmstat",

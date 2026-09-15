@@ -27,7 +27,7 @@ def test_health_and_summary():
             assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.46"
+        assert health.json()["version"] == "0.3.47"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()

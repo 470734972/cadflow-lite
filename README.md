@@ -71,7 +71,7 @@ v0.3.28 在页面右上角显示最近一次采集时间，并可悬停查看原
 
 ### 6. License
 
-展示每台 FlexNet License Server 的服务状态和近 24 小时可用性；采集使用 `lmstat -s`，不会枚举全部 Feature，避免大规模 Feature 集群产生大量快照数据。
+展示每台 FlexNet License Server 的服务状态和近 24 小时可用性；采集优先使用 `lmstat -s`，不会枚举全部 Feature。对不输出服务状态头的旧版 FlexNet 客户端，会自动兼容执行一次 `lmstat -a`，但只读取 `Feature usage info` 前的服务和 Vendor 状态，Feature 明细不会解析或写入快照。
 
 ![CADFlow License 视图](docs/screenshots/licenses.png)
 
@@ -86,7 +86,7 @@ LSF 与 FlexNet 独立配置：LSF 使用固定白名单命令采集；FlexNet �
 ```text
 LSF 命令 (bjobs / bqueues / bhosts / lsload) ─┐
                                                ├─> CADFlow 采集器 ─> SQLite ─> Web / API / Prometheus
-FlexNet 命令 (lmstat -s) ──────────────────────┘
+FlexNet 命令 (lmstat -s，旧版自动兼容) ──────────┘
 ```
 
 - 采集命令固定为只读白名单：`bjobs`、`bqueues`、`bhosts`、`lsload`、`lmstat`。
