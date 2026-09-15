@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 import shutil
@@ -11,9 +10,6 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
 from .base import Collector
-
-
-logger = logging.getLogger(__name__)
 
 
 class CommandError(RuntimeError):
@@ -481,13 +477,6 @@ def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict
     }
 
 
-def lmstat_status_excerpt(text: str, limit: int = 1200) -> str:
-    """Return a bounded service-header diagnostic without Feature details."""
-    cleaned = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text.replace("\x00", " "))
-    cleaned = cleaned.split("Feature usage info:", 1)[0]
-    return " ".join(cleaned.split())[:limit]
-
-
 class LsfCollector(Collector):
     """Collector for an existing, authorised IBM Spectrum LSF client installation."""
 
@@ -680,28 +669,9 @@ class LsfCollector(Collector):
             server = str(source.get("server", "")).strip()
             vendor = str(source.get("vendor", "")).strip()
             try:
-                # Keep the option order used by the site's FlexNet 11.14
-                # client; unlike modern lmstat builds, this legacy binary can
-                # produce a different summary when -c precedes -s.
+                # One bounded service-health probe only: no Feature inventory.
                 output = self.runner.run(["lmstat", "-s", "-c", server])
                 row = parse_lmstat_server_status(output, server, vendor)
-                # FlexNet 11.14 (used by some legacy EDA tool bundles) accepts
-                # ``-s`` but omits the "license server UP" header.  Retrying
-                # with the portable ``-a`` form is only a compatibility path:
-                # parse_lmstat_server_status discards Feature usage info and we
-                # still store exactly one health row, never Feature records.
-                # Do not trust a partial ``-s`` vendor line by itself.  Some
-                # legacy clients print a misleading vendor state but omit the
-                # authoritative server header; the full report is required to
-                # distinguish that from a real daemon failure.
-                if not re.search(r"\blicense\s+server\s+UP\b", output, re.I):
-                    legacy_output = self.runner.run(["lmstat", "-a", "-c", server])
-                    row = parse_lmstat_server_status(legacy_output, server, vendor)
-                if row["status"] != "ok":
-                    logger.warning(
-                        "FlexNet lmstat response was not recognised as UP for %s; command=lmstat -s -c %s; output=%s",
-                        server, server, lmstat_status_excerpt(output),
-                    )
             except CommandError as exc:
                 row = {
                     "server": server, "vendor": vendor, "feature": "License Server",
