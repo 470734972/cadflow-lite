@@ -135,6 +135,14 @@ def test_parse_lmstat_server_status_marks_down_vendor_critical():
     assert row["expires_at"] == "Vendor daemon DOWN: snpslmd"
 
 
+def test_parse_lmstat_server_status_accepts_reachable_status_header():
+    row = parse_lmstat_server_status(
+        "License server status: 27000@rd1\nVendor daemon status (on rd1):\n",
+        "27000@rd1", "snpslmd",
+    )
+    assert row["status"] == "ok"
+
+
 def test_license_sources_keep_vendors_independent():
     from app.config import RuntimeConfig
 

@@ -428,7 +428,9 @@ def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict
     }
     configured_vendors = [name.strip().lower() for name in vendor.split(",") if name.strip()]
     down_vendors = [name for name in configured_vendors if vendor_states.get(name) == "DOWN"]
-    if server_up and not down_vendors:
+    status_header = bool(re.search(r"license\s+server\s+status\s*:", text, re.I))
+    explicit_server_down = bool(re.search(r"license\s+server[^\n]*(?:DOWN|not\s+(?:responding|available)|cannot|failed)", text, re.I))
+    if (server_up or (status_header and not explicit_server_down)) and not down_vendors:
         detail = "License server UP"
         status = "ok"
     elif down_vendors:
