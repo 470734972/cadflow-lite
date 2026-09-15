@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.51">
-  <link rel="stylesheet" href="/static/style.css?v=0.3.51">
+  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.52">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.52">
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">
-      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.51" alt="NCC">
+      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.52" alt="NCC">
       <div class="brand-copy"><b>Ncc CAD Flow</b><small>EDA Compute Insight</small></div>
     </div>
     <nav>
@@ -89,14 +89,6 @@
 
         </div>
 
-        <section class="config-section flexnet-section">
-          <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License 配置</h3><p>单独维护每台 License Server；可逐条新增、修改或删除，不采集 Feature 明细。</p></div></div>
-          <label>lmstat 完整路径<input name="lmstat_path" placeholder="/path/to/lmstat"><small>所有 License Server 共用的 lmstat 可执行文件绝对路径。</small></label>
-          <div class="license-source-heading"><strong>License Server 列表</strong><button id="addLicenseSource" type="button" class="secondary-button">新增 License Server</button></div>
-          <div id="licenseSourceRows" class="license-source-list"></div>
-          <small class="retention-note">每条记录可单独设置端口@服务器和要检查的 Vendor daemon；删除后下次采集不再检查该服务器。</small>
-        </section>
-
         <section class="config-section schedule-section">
           <div class="section-heading"><div class="section-icon">04</div><div><h3>采集策略</h3><p>控制采集频率、命令等待时间和数据时效判定。</p></div></div>
           <div class="form-grid schedule-grid">
@@ -117,6 +109,16 @@
 
         <footer class="config-actions"><div class="config-action-group"><button type="submit">保存配置并预检 LSF</button><button id="updateBtn" class="secondary-button" type="button">更新代码并重启</button><small id="configMessage" aria-live="polite">未保存的修改不会应用到采集器。</small></div><p>更新会执行快进拉取并短暂重启服务；FlexNet 配置在下次采集时读取。</p></footer>
       </form>
+      <form id="licenseConfigForm" class="config-form license-config-form">
+        <section class="config-section flexnet-section">
+          <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License 配置</h3><p>独立保存 License Server 配置，不触发 LSF 预检，也不会修改 LSF 设置。</p></div></div>
+          <label>lmstat 完整路径<input name="lmstat_path" placeholder="/path/to/lmstat"><small>所有 License Server 共用的 lmstat 可执行文件绝对路径。</small></label>
+          <div class="license-source-heading"><strong>License Server 列表</strong><button id="addLicenseSource" type="button" class="secondary-button">新增 License Server</button></div>
+          <div id="licenseSourceRows" class="license-source-list"></div>
+          <small class="retention-note">每条记录可单独设置端口@服务器和要检查的 Vendor daemon；删除后下次采集不再检查该服务器。</small>
+          <footer class="config-actions license-config-actions"><div class="config-action-group"><button type="submit">保存 FlexNet 配置</button><small id="licenseConfigMessage" aria-live="polite">未保存的修改不会应用到 License 采集。</small></div><p>保存后立即更新 License 采集器，下一次采集开始生效。</p></footer>
+        </section>
+      </form>
     </section>
   </main>
   <div id="configAuth" class="auth-backdrop" hidden>
@@ -128,8 +130,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js?v=0.3.51"></script>
-  <script src="/static/pending-jobs.js?v=0.3.51"></script>
-  <script src="/static/table-sorting.js?v=0.3.51"></script>
+  <script src="/static/app.js?v=0.3.52"></script>
+  <script src="/static/pending-jobs.js?v=0.3.52"></script>
+  <script src="/static/table-sorting.js?v=0.3.52"></script>
 </body>
 </html>

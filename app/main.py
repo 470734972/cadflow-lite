@@ -134,6 +134,18 @@ class Runtime:
             self.db.save_config("runtime", candidate.to_dict())
         return candidate.to_dict()
 
+    def update_license(self, payload: dict[str, Any]) -> dict[str, Any]:
+        merged = self.config.to_dict()
+        merged["lmstat_path"] = payload.get("lmstat_path", self.config.lmstat_path)
+        merged["license_sources"] = payload.get("license_sources", merged["license_sources"])
+        candidate = RuntimeConfig.from_dict(merged)
+        candidate_service = self._make_service(candidate)
+        with self._lock:
+            self.config = candidate
+            self.service = candidate_service
+            self.db.save_config("runtime", candidate.to_dict())
+        return candidate.to_dict()
+
     def collect(self) -> dict[str, Any]:
         if self.config.mode == "setup":
             return {"ok": False, "error": "complete the LSF configuration first", "duration_ms": 0}
@@ -272,7 +284,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.51", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.52", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -323,6 +335,14 @@ def get_config(_: None = Depends(require_config_session)) -> dict[str, Any]:
 def update_config(payload: dict[str, Any], _: None = Depends(require_config_session)) -> dict[str, Any]:
     try:
         return runtime.update(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/license-config")
+def update_license_config(payload: dict[str, Any], _: None = Depends(require_config_session)) -> dict[str, Any]:
+    try:
+        return runtime.update_license(payload)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
