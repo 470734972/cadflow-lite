@@ -27,7 +27,7 @@ def test_health_and_summary():
             assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.43"
+        assert health.json()["version"] == "0.3.45"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         config = client.get("/api/config").json()
@@ -152,6 +152,17 @@ def test_config_auth_rejects_wrong_password_and_supports_logout():
         assert client.get("/api/config").status_code == 200
         assert client.post("/api/config/logout").status_code == 200
         assert client.get("/api/config").status_code == 401
+
+
+def test_license_data_requires_config_auth():
+    with TestClient(app) as client:
+        assert client.get("/api/licenses").status_code == 401
+        assert client.get("/api/licenses/status").status_code == 401
+        assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
+        assert client.get("/api/licenses").status_code == 200
+        status = client.get("/api/licenses/status")
+        assert status.status_code == 200
+        assert {"availability_pct", "timeline", "window_hours"} <= status.json().keys()
 
 
 def test_web_update_requires_config_auth_and_starts_fixed_script(monkeypatch, tmp_path):

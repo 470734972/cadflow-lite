@@ -270,7 +270,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.43", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.45", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -455,8 +455,20 @@ def hosts() -> list[dict]:
 
 
 @app.get("/api/licenses")
-def licenses() -> list[dict]:
+def licenses(_: None = Depends(require_config_session)) -> list[dict]:
     return runtime.rows("licenses")
+
+
+@app.get("/api/licenses/status")
+def license_status(_: None = Depends(require_config_session)) -> dict[str, Any]:
+    """Return the authenticated 24-hour availability view for FlexNet collection."""
+    sla_data = runtime.sla()
+    component = next(item for item in sla_data["components"] if item["key"] == "licenses")
+    timeline = []
+    for item in sla_data["timeline"]:
+        status = "ok" if item["status"] == "ok" else "partial" if item["status"] == "partial" else "error"
+        timeline.append({"collected_at": item["collected_at"], "status": status, "error": item["error"]})
+    return {**component, "window_hours": sla_data["window_hours"], "timeline": timeline}
 
 
 @app.get("/api/alerts")
