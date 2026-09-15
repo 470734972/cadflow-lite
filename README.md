@@ -25,7 +25,7 @@ v0.3.28 在页面右上角显示最近一次采集时间，并可悬停查看原
 | 用户 | 汇总各用户的作业数、运行 Slots 与资源占用，并可搜索过滤 |
 | 队列 | 查看 LSF 队列的状态、优先级、运行/等待情况；`MAX=-` 会显示为“不限”，不会误显示为 0 |
 | 节点 | 查看 Slots、CPU 利用率、Load、可用内存、`/tmp` 与 Swap 等 LSF 主机资源 |
-| License | 读取 FlexNet `lmstat`，按 Vendor、特征名和状态筛选许可证使用情况 |
+| License | 使用 FlexNet `lmstat -s` 检查每台 License Server 与已配置 Vendor 的服务状态，不枚举 Feature |
 | 配置 | 在 Web 中分别配置 LSF 与 FlexNet 采集源，并通过只读 LSF 预检后启用真实采集 |
 | 主题 | 默认亮色显示，支持一键切换深色模式，并记住浏览器的选择 |
 | 版本信息 | 左侧栏底部显示当前 CADFlow Lite 发布版本，便于确认部署版本 |
@@ -71,7 +71,7 @@ v0.3.28 在页面右上角显示最近一次采集时间，并可悬停查看原
 
 ### 6. License
 
-汇总 FlexNet 特征许可的总数、已用数、剩余数和风险状态，提供关键字、Vendor 与状态筛选。
+展示每台 FlexNet License Server 的服务状态和近 24 小时可用性；采集使用 `lmstat -s`，不会枚举全部 Feature，避免大规模 Feature 集群产生大量快照数据。
 
 ![CADFlow License 视图](docs/screenshots/licenses.png)
 
@@ -86,7 +86,7 @@ LSF 与 FlexNet 独立配置：LSF 使用固定白名单命令采集；FlexNet �
 ```text
 LSF 命令 (bjobs / bqueues / bhosts / lsload) ─┐
                                                ├─> CADFlow 采集器 ─> SQLite ─> Web / API / Prometheus
-FlexNet 命令 (lmstat -a) ──────────────────────┘
+FlexNet 命令 (lmstat -s) ──────────────────────┘
 ```
 
 - 采集命令固定为只读白名单：`bjobs`、`bqueues`、`bhosts`、`lsload`、`lmstat`。
@@ -279,7 +279,7 @@ sudo -u <运行账户> bash -lc '
   bqueues -w
   bhosts -w
   lsload -w
-  <lmstat 完整路径> -a -c <端口@许可证服务器>
+  <lmstat 完整路径> -c <端口@许可证服务器> -s
 '
 ```
 

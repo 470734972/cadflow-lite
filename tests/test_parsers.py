@@ -1,6 +1,6 @@
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -118,6 +118,23 @@ def test_parse_lmstat_includes_node_locked_inventory():
     assert rows == [{"server": "27000@license01", "vendor": "snpslmd,cdslmd", "feature": "amps", "total": 0, "used": 0, "expires_at": "", "status": "node_locked"}]
 
 
+def test_parse_lmstat_server_status_without_feature_inventory():
+    row = parse_lmstat_server_status(
+        "License server status: 27000@rd1\n  license server UP (MASTER) v11.19\n  snpslmd: UP v11.19\n",
+        "27000@rd1", "snpslmd",
+    )
+    assert row == {"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"}
+
+
+def test_parse_lmstat_server_status_marks_down_vendor_critical():
+    row = parse_lmstat_server_status(
+        "License server status: 27000@rd1\n  license server UP (MASTER) v11.19\n  snpslmd: DOWN\n",
+        "27000@rd1", "snpslmd",
+    )
+    assert row["status"] == "critical"
+    assert row["expires_at"] == "Vendor daemon DOWN: snpslmd"
+
+
 def test_collection_failure_detail_identifies_failed_data_source():
     assert collection_failure_detail({"status": "error", "error": "required command is not executable: /path/to/lmstat"}) == {
         "component": "FlexNet License", "message": "required command is not executable: /path/to/lmstat",
@@ -164,7 +181,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
                 "bhosts": "HOST_NAME STATUS JL/U MAX NJOBS RUN SSUSP USUSP RSV\ncompute01 ok - 64 8 8 0 0 0\n",
                 "lsload": "HOST_NAME status r15s r1m r15m ut pg ls it tmp swp mem\ncompute01.eda.lan ok 0.1 0.2 0.3 72% 0 0 0 0 64G 128G\n",
                 "lshosts": "HOST_NAME type model cpuf ncpus maxmem maxswp maxtmp rexpri server RESOURCES\ncompute01.eda.lan X86_64 model 2.0 64 256G 128G 100G 0 1 -\n",
-                "lmstat": "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)\n",
+                "lmstat": "License server status: 27000@license-host\n  license server UP (MASTER) v11.19\n  snpslmd: UP v11.19\n",
             }
             return outputs[argv[0]]
 
@@ -184,10 +201,12 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert payload["hosts"][0]["total_mem_mb"] == 262144
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"
+    assert payload["licenses"][0]["feature"] == "License Server"
     assert ["bjobs", "-u", "all", "-a", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
     assert ["bjobs", "-p", "-u", "all", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
     assert ["bjobs", "-p", "-u", "all"] in runner.commands
     assert ["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"] in runner.commands
+    assert ["lmstat", "-c", "27000@license-host", "-s"] in runner.commands
 
 
 def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():

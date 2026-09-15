@@ -145,6 +145,14 @@ def build_alerts_from_rows(
         if queue["pending"] >= 20:
             alerts.append({"severity": "warning", "source": queue["name"], "message": f"{queue['pending']} jobs are pending"})
     for item in licenses:
+        if item.get("feature") == "License Server":
+            if item.get("status") != "ok":
+                alerts.append({
+                    "severity": "critical",
+                    "source": item.get("server", "License Server"),
+                    "message": item.get("expires_at", "License server status is unavailable"),
+                })
+            continue
         ratio = item["used"] / item["total"] if item["total"] else 0
         if ratio >= 0.95:
             alerts.append({"severity": "critical", "source": item["feature"], "message": f"License usage is {ratio:.0%}"})

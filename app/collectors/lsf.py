@@ -412,6 +412,35 @@ def parse_lmstat(text: str, server: str, vendor: str = "") -> list[dict[str, Uni
     return features
 
 
+def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict[str, Union[str, int]]:
+    """Parse the compact ``lmstat -s`` service report without enumerating features."""
+    server_up = bool(re.search(r"\blicense\s+server\s+UP\b", text, re.I))
+    vendor_states = {
+        name.lower(): state.upper()
+        for name, state in re.findall(r"^\s*([A-Za-z0-9_.-]+):\s*(UP|DOWN)\b", text, re.I | re.M)
+    }
+    configured_vendors = [name.strip().lower() for name in vendor.split(",") if name.strip()]
+    down_vendors = [name for name in configured_vendors if vendor_states.get(name) == "DOWN"]
+    if server_up and not down_vendors:
+        detail = "License server UP"
+        status = "ok"
+    elif down_vendors:
+        detail = f"Vendor daemon DOWN: {', '.join(down_vendors)}"
+        status = "critical"
+    else:
+        detail = "lmstat did not report license server UP"
+        status = "critical"
+    return {
+        "server": server,
+        "vendor": vendor,
+        "feature": "License Server",
+        "total": 0,
+        "used": 0,
+        "expires_at": detail,
+        "status": status,
+    }
+
+
 class LsfCollector(Collector):
     """Collector for an existing, authorised IBM Spectrum LSF client installation."""
 
@@ -444,7 +473,10 @@ class LsfCollector(Collector):
         if self.license_servers:
             try:
                 self.runner.check_available(["lmstat"])
-                payload["licenses"] = self._licenses()
+                license_rows, license_warnings = self._licenses()
+                payload["licenses"] = license_rows
+                if license_warnings:
+                    payload["_warnings"] = license_warnings
             except CommandError as exc:
                 # License availability must not hide otherwise healthy LSF capacity data.
                 payload["_warnings"] = [f"FlexNet License: {exc}"]
@@ -582,9 +614,20 @@ class LsfCollector(Collector):
             })
         return hosts
 
-    def _licenses(self) -> list[dict]:
+    def _licenses(self) -> tuple[list[dict], list[str]]:
+        """Collect one bounded service-health row per configured license server."""
         rows: list[dict] = []
+        warnings: list[str] = []
         for server in self.license_servers:
-            output = self.runner.run(["lmstat", "-a", "-c", server])
-            rows.extend(parse_lmstat(output, server, self.license_vendor))
-        return rows
+            try:
+                output = self.runner.run(["lmstat", "-c", server, "-s"])
+                row = parse_lmstat_server_status(output, server, self.license_vendor)
+            except CommandError as exc:
+                row = {
+                    "server": server, "vendor": self.license_vendor, "feature": "License Server",
+                    "total": 0, "used": 0, "expires_at": str(exc), "status": "critical",
+                }
+            rows.append(row)
+            if row["status"] != "ok":
+                warnings.append(f"FlexNet License: lmstat status check for {server}: {row['expires_at']}")
+        return rows, warnings

@@ -66,9 +66,7 @@ class DemoCollector(Collector):
                 "project": rng.choice(projects),
             })
         licenses = [
-            {"server": "27000@license01", "vendor": "snpslmd", "feature": "VCS", "total": 120, "used": 108, "expires_at": "2027-03-31", "status": "warning"},
-            {"server": "27000@license01", "vendor": "snpslmd", "feature": "DC-ULTRA", "total": 80, "used": 54, "expires_at": "2027-03-31", "status": "ok"},
-            {"server": "27001@license02", "vendor": "cdslmd", "feature": "Virtuoso", "total": 160, "used": 147, "expires_at": "2026-12-31", "status": "critical"},
-            {"server": "27001@license02", "vendor": "cdslmd", "feature": "Innovus", "total": 96, "used": 67, "expires_at": "2026-12-31", "status": "ok"},
+            {"server": "27000@license01", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"},
+            {"server": "27001@license02", "vendor": "cdslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "Vendor daemon DOWN: cdslmd", "status": "critical"},
         ]
         return {"jobs": jobs, "queues": queues, "hosts": hosts, "licenses": licenses}
