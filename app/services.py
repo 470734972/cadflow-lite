@@ -180,6 +180,11 @@ def _component_available(snapshot: dict[str, Any], component: str, markers: tupl
     """Determine availability from the saved collector outcome without inventing probes."""
     status = str(snapshot.get("status", "")).lower()
     error = str(snapshot.get("error", "")).lower()
+    # Versions before the lmstat symlink fix invoked lmutil itself and wrote
+    # this synthetic warning. Preserve it in SQLite for audit, but do not let
+    # it count as a real License outage in the dashboard SLA.
+    if component == "licenses" and "lmstat did not report license server up" in error:
+        return True
     if component == "collection":
         return status == "ok"
     if status == "ok":

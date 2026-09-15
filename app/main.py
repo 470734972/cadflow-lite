@@ -284,7 +284,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.63", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.65", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -502,7 +502,8 @@ def license_status(_: None = Depends(require_config_session)) -> dict[str, Any]:
             start = now - timedelta(hours=offset)
             candidates = [row for row in item["rows"] if start.isoformat() <= str(row.get("collected_at", "")) < end.isoformat()]
             row = candidates[-1] if candidates else None
-            status = "ok" if row and row.get("status") == "ok" else "error" if row else "unknown"
+            legacy_false_error = row and row.get("expires_at") == "lmstat did not report license server UP"
+            status = "unknown" if legacy_false_error else "ok" if row and row.get("status") == "ok" else "error" if row else "unknown"
             timeline.append({"hour": start.isoformat(), "collected_at": row.get("collected_at") if row else "", "status": status, "error": row.get("expires_at", "") if row else ""})
         observed = sum(slot["status"] != "unknown" for slot in timeline)
         good = sum(slot["status"] == "ok" for slot in timeline)
