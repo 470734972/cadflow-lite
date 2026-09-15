@@ -161,7 +161,7 @@ def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
         def run(self, argv):
             self.commands.append(argv)
             if argv == ["lmstat", "-c", "27000@rd1", "-s"]:
-                return "lmstat status summary is unavailable on this client\n"
+                return "Vendor daemon status (on rd1):\n  snpslmd: DOWN\n"
             if argv == ["lmstat", "-a", "-c", "27000@rd1"]:
                 return (
                     "License server status: 27000@rd1\n"

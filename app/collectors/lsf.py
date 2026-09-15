@@ -640,7 +640,11 @@ class LsfCollector(Collector):
                 # with the portable ``-a`` form is only a compatibility path:
                 # parse_lmstat_server_status discards Feature usage info and we
                 # still store exactly one health row, never Feature records.
-                if row["expires_at"] == "lmstat did not report license server UP":
+                # Do not trust a partial ``-s`` vendor line by itself.  Some
+                # legacy clients print a misleading vendor state but omit the
+                # authoritative server header; the full report is required to
+                # distinguish that from a real daemon failure.
+                if not re.search(r"\blicense\s+server\s+UP\b", output, re.I):
                     legacy_output = self.runner.run(["lmstat", "-a", "-c", server])
                     row = parse_lmstat_server_status(legacy_output, server, vendor)
             except CommandError as exc:
