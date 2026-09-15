@@ -80,3 +80,14 @@ main { width:auto; max-width:none; margin-left:228px; padding:28px 34px 48px; } 
 .license-server { grid-template-columns:1fr 2fr 80px; }.license-server.is-risk { border-left:3px solid var(--red); }.license-server-detail { display:block; margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .license-current-status .status.ok { color:var(--green); }
 .license-current-status .status.warning,.license-current-status .status.critical { color:var(--red); }
+.license-availability { gap:0; margin:0; }
+.license-history-card { padding:14px 8px 12px; border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+.license-history-card:first-child { border-top:0; }
+.license-service-name { display:flex; align-items:center; gap:8px; min-width:0; }
+.license-health-dot { display:grid; flex:none; width:17px; height:17px; place-items:center; border-radius:50%; color:#fff; background:var(--green); font-size:11px; font-weight:800; line-height:1; }
+.license-health-dot.risk { background:var(--red); }
+.license-service-name h3 { margin:0; font-size:13px; }
+.license-service-name small { display:block; max-width:min(70vw,900px); margin-top:3px; overflow:hidden; color:var(--muted); text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.license-hour-bars { display:flex; gap:3px; min-height:16px; margin:9px 0 5px 25px; align-items:center; }
+.license-hour-bars i { flex:0 0 6px; width:6px; height:14px; border-radius:1px; }
+.license-history-detail { margin-left:25px; }
