@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -10,6 +11,9 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
 from .base import Collector
+
+
+logger = logging.getLogger(__name__)
 
 
 class CommandError(RuntimeError):
@@ -473,6 +477,13 @@ def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict
     }
 
 
+def lmstat_status_excerpt(text: str, limit: int = 1200) -> str:
+    """Return a bounded service-header diagnostic without Feature details."""
+    cleaned = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text.replace("\x00", " "))
+    cleaned = cleaned.split("Feature usage info:", 1)[0]
+    return " ".join(cleaned.split())[:limit]
+
+
 class LsfCollector(Collector):
     """Collector for an existing, authorised IBM Spectrum LSF client installation."""
 
@@ -682,6 +693,11 @@ class LsfCollector(Collector):
                 if not re.search(r"\blicense\s+server\s+UP\b", output, re.I):
                     legacy_output = self.runner.run(["lmstat", "-a", "-c", server])
                     row = parse_lmstat_server_status(legacy_output, server, vendor)
+                if row["status"] != "ok":
+                    logger.warning(
+                        "FlexNet lmstat response was not recognised as UP for %s; command=lmstat -s -c %s; output=%s",
+                        server, server, lmstat_status_excerpt(output),
+                    )
             except CommandError as exc:
                 row = {
                     "server": server, "vendor": vendor, "feature": "License Server",
