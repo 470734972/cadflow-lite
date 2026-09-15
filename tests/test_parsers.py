@@ -143,6 +143,24 @@ def test_parse_lmstat_server_status_accepts_reachable_status_header():
     assert row["status"] == "ok"
 
 
+def test_parse_lmstat_server_status_accepts_flexnet_status_variants():
+    row = parse_lmstat_server_status(
+        "\x1b[32mLicense server status=27000@rd1\x1b[0m\n"
+        "License file(s) on rd1: /cadtools/license/syn.dat\n"
+        "Vendor daemon status (on rd1):\n",
+        "27000@rd1", "snpslmd",
+    )
+    assert row["status"] == "ok"
+
+
+def test_parse_lmstat_server_status_marks_reverse_connect_failure():
+    row = parse_lmstat_server_status(
+        "Cannot connect to license server system. (-15,10)\n",
+        "27000@rd1", "snpslmd",
+    )
+    assert row["status"] == "critical"
+
+
 def test_license_sources_keep_vendors_independent():
     from app.config import RuntimeConfig
 

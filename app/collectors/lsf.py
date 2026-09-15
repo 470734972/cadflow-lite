@@ -426,17 +426,25 @@ def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict
     only the text before ``Feature usage info:``, so Feature inventory is never
     parsed or persisted.
     """
+    # FlexNet 11.x builds may add terminal color/control bytes when invoked
+    # from a service wrapper.  Strip those before matching the human report.
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text.replace("\x00", " "))
     text = text.split("Feature usage info:", 1)[0]
-    server_up = bool(re.search(r"\blicense\s+server\s+UP\b", text, re.I))
+    server_up = bool(re.search(r"\blicense\s+server\s+(?:UP|is\s+UP)\b", text, re.I))
     vendor_states = {
         name.lower(): state.upper()
         for name, state in re.findall(r"^\s*([A-Za-z0-9_.-]+):\s*(UP|DOWN)\b", text, re.I | re.M)
     }
     configured_vendors = [name.strip().lower() for name in vendor.split(",") if name.strip()]
     down_vendors = [name for name in configured_vendors if vendor_states.get(name) == "DOWN"]
-    status_header = bool(re.search(r"license\s+server\s+status\s*:", text, re.I))
-    explicit_server_down = bool(re.search(r"license\s+server[^\n]*(?:DOWN|not\s+(?:responding|available)|cannot|failed)", text, re.I))
-    if (server_up or (status_header and not explicit_server_down)) and not down_vendors:
+    status_header = bool(re.search(r"license\s+server(?:\s+status)?\s*(?:status\s*)?[:=]\s*", text, re.I))
+    reachable_evidence = bool(re.search(r"license\s+file\s*\(s\)\s+on|vendor\s+daemon\s+status", text, re.I))
+    explicit_server_down = bool(re.search(
+        r"(?:license\s+server[^\n]*(?:DOWN|not\s+(?:responding|available)|cannot|failed))|"
+        r"(?:cannot|unable|failed|error)\s+(?:connect\s+to\s+)?[^\n]{0,80}license\s+server",
+        text, re.I,
+    ))
+    if (server_up or ((status_header or reachable_evidence) and not explicit_server_down)) and not down_vendors:
         detail = "License server UP"
         status = "ok"
     elif down_vendors:
