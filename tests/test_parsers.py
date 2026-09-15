@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
@@ -225,6 +227,19 @@ def test_runner_rejects_non_allowlisted_command():
         assert "allowlist" in str(exc)
     else:
         raise AssertionError("unsafe command was accepted")
+
+
+def test_runner_preserves_lmstat_symbolic_link(tmp_path):
+    lmutil = tmp_path / "lmutil"
+    lmutil.write_text("#!/bin/sh\n", encoding="utf-8")
+    lmutil.chmod(0o755)
+    lmstat = tmp_path / "lmstat"
+    try:
+        lmstat.symlink_to(lmutil)
+    except OSError:
+        pytest.skip("symbolic links are unavailable")
+    runner = SafeRunner(lmstat_path=lmstat)
+    assert Path(runner._resolve("lmstat")) == lmstat
 
 
 def test_lsf_collector_uses_real_command_contract_without_inventing_requested_memory():

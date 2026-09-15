@@ -32,7 +32,11 @@ class SafeRunner:
     def __init__(self, timeout: int = 20, lsf_bin_dir: Optional[Path] = None, lmstat_path: Optional[Path] = None, extra_env: Optional[Mapping[str, str]] = None):
         self.timeout = timeout
         self.lsf_bin_dir = lsf_bin_dir.resolve() if lsf_bin_dir else None
-        self.lmstat_path = lmstat_path.resolve() if lmstat_path else None
+        # FlexNet commonly exposes ``lmstat`` as a symbolic link to ``lmutil``.
+        # lmutil dispatches from argv[0], so resolving this link changes the
+        # invoked program name to ``lmutil`` and prints usage text instead of
+        # running the lmstat subcommand.  Preserve the configured link.
+        self.lmstat_path = lmstat_path.absolute() if lmstat_path else None
         self.extra_env = dict(extra_env or {})
 
     def _resolve(self, command: str) -> str:
