@@ -54,11 +54,20 @@ class SafeRunner:
     def run(self, argv: Sequence[str]) -> str:
         if not argv:
             raise CommandError("empty command")
+        name = Path(argv[0]).name
         executable = self._resolve(argv[0])
         env = os.environ.copy()
         env["LC_ALL"] = "C"
         env["LANG"] = "C"
-        env.update(self.extra_env)
+        if name == "lmstat":
+            # LSF and FlexNet can ship incompatible shared libraries.  The
+            # saved LSF environment is needed for bjobs/bhosts, but must not
+            # leak into a separately configured lmstat binary.
+            env = {key: value for key, value in env.items() if not key.startswith("LSF_") and key != "LD_LIBRARY_PATH"}
+            env["LC_ALL"] = "C"
+            env["LANG"] = "C"
+        else:
+            env.update(self.extra_env)
         try:
             process = subprocess.Popen(
                 [executable, *argv[1:]], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -81,7 +90,7 @@ class SafeRunner:
         # interactive shell shows both streams, while the collector used to
         # parse stdout only; preserve both for lmstat so a valid server report
         # written to stderr is not mistaken for an empty/unknown result.
-        if Path(argv[0]).name == "lmstat" and stderr.strip():
+        if name == "lmstat" and stderr.strip():
             stdout = f"{stdout}\n{stderr}" if stdout.strip() else stderr
         if len(stdout) > 10_000_000:
             raise CommandError(f"command output exceeds 10 MB: {Path(argv[0]).name}")

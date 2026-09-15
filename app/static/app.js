@@ -110,13 +110,17 @@ function renderLicenseAvailability(status){
   const currentByServer=new Map((allLicenses||[]).map(row=>[String(row.server||''),row]));
   const cards=status.servers.filter(server=>{
     const current=currentByServer.get(String(server.server||''))||{};
-    const text=`${server.server||''} ${server.vendor||''}`.toLowerCase(),risk=['warning','critical'].includes(current.status);
-    return (!query||text.includes(query))&&(!statusFilter||(statusFilter==='ok'&&current.status==='ok')||(statusFilter==='risk'&&risk));
+    const latest=[...(server.timeline||[])].reverse().find(item=>item.status!=='unknown')||{};
+    const effectiveStatus=current.status||({ok:'ok',error:'critical'}[latest.status]||'');
+    const text=`${server.server||''} ${server.vendor||''}`.toLowerCase(),risk=['warning','critical'].includes(effectiveStatus);
+    return (!query||text.includes(query))&&(!statusFilter||(statusFilter==='ok'&&effectiveStatus==='ok')||(statusFilter==='risk'&&risk));
   }).map(server=>{
-    const current=currentByServer.get(String(server.server||''))||{},risk=['warning','critical'].includes(current.status),label=current.status==='ok'?'正常':risk?'异常':current.status||'未知',detail=current.expires_at||'未提供状态详情',availability=server.availability_pct,good=server.good_samples||0,observed=server.observed_samples||0,bars=(server.timeline||[]).map(item=>{const itemLabel=`${item.hour||'未知时间'} · ${item.status==='ok'?'正常':item.status==='unknown'?'暂无采样':'异常'}${item.error?` · ${item.error}`:''}`;return `<i class="${esc(item.status)}" title="${esc(itemLabel)}"></i>`}).join('');
-    const state=current.status==='ok'?'ok':risk?'risk':'unknown',icon=state==='ok'?'✓':state==='risk'?'!':'?';
+    const current=currentByServer.get(String(server.server||''))||{},latest=[...(server.timeline||[])].reverse().find(item=>item.status!=='unknown')||{};
+    const effectiveStatus=current.status||({ok:'ok',error:'critical'}[latest.status]||''),risk=['warning','critical'].includes(effectiveStatus),label=effectiveStatus==='ok'?'正常':risk?'异常':effectiveStatus||'未知',detail=current.expires_at||latest.error||'未提供状态详情',availability=server.availability_pct,good=server.good_samples||0,observed=server.observed_samples||0,bars=(server.timeline||[]).map(item=>{const itemLabel=`${item.hour||'未知时间'} · ${item.status==='ok'?'正常':item.status==='unknown'?'暂无采样':'异常'}${item.error?` · ${item.error}`:''}`;return `<i class="${esc(item.status)}" title="${esc(itemLabel)}"></i>`}).join('');
+    const state=effectiveStatus==='ok'?'ok':risk?'risk':'unknown',icon=state==='ok'?'✓':state==='risk'?'!':'?';
     const samples=availability===null?'尚无采样':`${good}/${observed} 小时样本`;
-    return `<article class="license-history-card ${risk?'is-risk':''}"><div class="license-history-heading"><div class="license-service-name"><span class="license-health-dot ${state}" aria-hidden="true">${icon}</span><div><h3>${esc(server.server)}</h3><small>${esc(server.vendor||'License Server')} · ${esc(label)}${detail?` · ${esc(detail)}`:''}</small></div></div></div><div class="license-hour-bars" aria-label="${esc(server.server)} 最近24小时 License 状态">${bars}</div><div class="license-availability-summary"><strong>${availability===null?'—':`${availability}% 可用`}</strong><small>${samples}</small></div></article>`;
+    const availabilityLabel=availability===null?'尚无样本':availability===0?'不可用':`可用率 ${availability}%`;
+    return `<article class="license-history-card ${risk?'is-risk':''}"><div class="license-history-heading"><div class="license-service-name"><span class="license-health-dot ${state}" aria-hidden="true">${icon}</span><div><h3>${esc(server.server)}</h3><small>${esc(server.vendor||'License Server')} · ${esc(label)}${detail?` · ${esc(detail)}`:''}</small></div></div></div><div class="license-hour-bars" aria-label="${esc(server.server)} 最近24小时 License 状态">${bars}</div><div class="license-availability-summary"><strong>${availabilityLabel}</strong><small>${samples}</small></div></article>`;
   }).join('');
   container.hidden=false;
   container.innerHTML=cards||'<p class="empty-state">没有匹配的 License Server。</p>';
