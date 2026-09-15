@@ -99,6 +99,27 @@ function renderHosts(rows){
 }
 function renderLicenseAvailability(status){const container=$('#licenseAvailability');if(!status||!Array.isArray(status.servers)){container.hidden=true;container.innerHTML='';return}const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])),cards=status.servers.map(server=>{const availability=server.availability_pct,good=server.good_samples||0,observed=server.observed_samples||0,detail=availability===null?'尚无最近 24 小时采集样本':`${availability}% 可用 · ${good}/${observed} 个小时有采样`,bars=(server.timeline||[]).map(item=>{const label=`${item.hour||'未知时间'} · ${item.status==='ok'?'正常':item.status==='unknown'?'暂无采样':'异常'}${item.error?` · ${item.error}`:''}`;return `<i class="${esc(item.status)}" title="${esc(label)}"></i>`}).join('');return `<article class="license-history-card"><div class="license-history-heading"><div><h3>${esc(server.server)}</h3><small>${esc(server.vendor||'License Server')}</small></div><strong>${availability===null?'—':`${availability}% 可用`}</strong></div><div class="license-hour-bars" aria-label="${esc(server.server)} 最近24小时 License 状态">${bars}</div><small class="license-history-detail">${detail} · 每格 1 小时</small></article>`}).join('');container.hidden=false;container.innerHTML=`<div class="license-history-heading-title"><h3>License Server 状态</h3><small>每台服务器独立统计最近 24 小时；每个竖条代表 1 小时，采样间隔为 1 小时。</small></div><div class="license-history-grid">${cards||'<p class="empty-state">尚未配置 License Server。</p>'}</div>`}
 function renderLicenses(rows){if(rows)allLicenses=rows;const query=$('#licenseSearch').value.trim().toLowerCase(),status=$('#licenseStatus').value,esc=value=>String(value??'-').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));const visible=allLicenses.filter(l=>{const text=`${l.vendor||''} ${l.server}`.toLowerCase(),isRisk=['warning','critical'].includes(l.status);return (!query||text.includes(query))&&(!status||(status==='ok'&&l.status==='ok')||(status==='risk'&&isRisk))});$('#licenseRows').innerHTML=visible.length?visible.map(l=>{const risk=['warning','critical'].includes(l.status),label=l.status==='ok'?'正常':risk?'异常':l.status||'未知',detail=l.expires_at||'未提供状态详情';return `<div class="license license-server ${risk?'is-risk':''}"><div><h3>${esc(l.server)}</h3><small>${esc(l.vendor||'FlexNet License Server')}</small></div><div><span class="status ${esc(l.status||'unknown')}">${label}</span><small class="license-server-detail">${esc(detail)}</small></div><div class="ratio"><strong>${risk?'异常':'可用'}</strong><small>服务状态</small></div></div>`}).join(''):'<p class="empty-state">没有匹配的 License Server。</p>'}
+let licenseStatusData=null;
+function renderLicenseAvailability(status){
+  const container=$('#licenseAvailability');
+  if(status) licenseStatusData=status;
+  status=licenseStatusData;
+  if(!status||!Array.isArray(status.servers)){container.hidden=true;container.innerHTML='';return}
+  const query=$('#licenseSearch').value.trim().toLowerCase(),statusFilter=$('#licenseStatus').value;
+  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const currentByServer=new Map((allLicenses||[]).map(row=>[String(row.server||''),row]));
+  const cards=status.servers.filter(server=>{
+    const current=currentByServer.get(String(server.server||''))||{};
+    const text=`${server.server||''} ${server.vendor||''}`.toLowerCase(),risk=['warning','critical'].includes(current.status);
+    return (!query||text.includes(query))&&(!statusFilter||(statusFilter==='ok'&&current.status==='ok')||(statusFilter==='risk'&&risk));
+  }).map(server=>{
+    const current=currentByServer.get(String(server.server||''))||{},risk=['warning','critical'].includes(current.status),label=current.status==='ok'?'正常':risk?'异常':current.status||'未知',detail=current.expires_at||'未提供状态详情',availability=server.availability_pct,good=server.good_samples||0,observed=server.observed_samples||0,history=availability===null?'尚无最近 24 小时采集样本':`${availability}% 可用 · ${good}/${observed} 个小时有采样`,bars=(server.timeline||[]).map(item=>{const itemLabel=`${item.hour||'未知时间'} · ${item.status==='ok'?'正常':item.status==='unknown'?'暂无采样':'异常'}${item.error?` · ${item.error}`:''}`;return `<i class="${esc(item.status)}" title="${esc(itemLabel)}"></i>`}).join('');
+    return `<article class="license-history-card ${risk?'is-risk':''}"><div class="license-history-heading"><div><h3>${esc(server.server)}</h3><small>${esc(server.vendor||'License Server')}</small></div><strong>${availability===null?'—':`${availability}% 可用`}</strong></div><div class="license-current-status"><span class="status ${esc(current.status||'unknown')}">${label}</span><small>${esc(detail)}</small></div><div class="license-hour-bars" aria-label="${esc(server.server)} 最近24小时 License 状态">${bars}</div><small class="license-history-detail">${history} · 每格 1 小时</small></article>`;
+  }).join('');
+  container.hidden=false;
+  container.innerHTML=cards||'<p class="empty-state">没有匹配的 License Server。</p>';
+}
+function renderLicenses(rows){if(rows)allLicenses=rows;renderLicenseAvailability()}
 function envToText(env){return Object.entries(env||{}).map(([k,v])=>`${k}=${v}`).join('\n')}
 function envToObject(text){return Object.fromEntries(text.split('\n').map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),x.slice(i+1).trim()]}).filter(([k])=>k))}
 let licenseSources=[];

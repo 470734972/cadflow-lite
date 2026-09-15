@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.54">
-  <link rel="stylesheet" href="/static/style.css?v=0.3.54">
+  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.55">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.55">
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">
-      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.54" alt="NCC">
+      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.55" alt="NCC">
       <div class="brand-copy"><b>Ncc CAD Flow</b><small>EDA Compute Insight</small></div>
     </div>
     <nav>
@@ -64,7 +64,7 @@
       </article>
       <article class="panel host-table-panel"><div class="queue-table-heading"><div><h2>节点明细</h2><small>可用内存、/tmp 和 Swap 均为节点当前可用容量；内存使用率由 LSF 总内存和可用内存计算。</small></div><span>最近一次采集</span></div><div class="table-wrap"><table class="host-table"><thead><tr><th>节点</th><th>状态</th><th>运行 / Slots</th><th>CPU</th><th>内存使用率</th><th>负载（1m / 15m）</th><th>可用内存</th><th>/tmp 可用</th><th>Swap 可用</th></tr></thead><tbody id="hostRows"></tbody></table></div></article>
     </section>
-    <section id="licenses" class="view"><article class="panel"><div id="licenseAvailability" class="license-availability" hidden></div><div class="panel-title"><div><h2>FlexNet License 服务状态</h2><small>每台 License Server 仅采集服务状态，不枚举 Feature 明细。</small></div><div class="license-filters"><input id="licenseSearch" type="search" placeholder="License Server 或 Vendor" autocomplete="off"><select id="licenseStatus"><option value="">全部状态</option><option value="ok">正常</option><option value="risk">异常</option></select></div></div><div id="licenseRows" class="license-list"></div></article></section>
+    <section id="licenses" class="view"><article class="panel"><div class="panel-title"><div><h2>License Server 状态</h2><small>每台服务器展示当前服务状态，并统计最近 24 小时可用性；不枚举 Feature 明细。</small></div><div class="license-filters"><input id="licenseSearch" type="search" placeholder="License Server 或 Vendor" autocomplete="off"><select id="licenseStatus"><option value="">全部状态</option><option value="ok">正常</option><option value="risk">异常</option></select></div></div><div id="licenseAvailability" class="license-availability" hidden></div></article></section>
 
     <section id="config" class="view">
       <div class="config-intro">
@@ -130,8 +130,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js?v=0.3.54"></script>
-  <script src="/static/pending-jobs.js?v=0.3.54"></script>
-  <script src="/static/table-sorting.js?v=0.3.54"></script>
+  <script src="/static/app.js?v=0.3.55"></script>
+  <script src="/static/pending-jobs.js?v=0.3.55"></script>
+  <script src="/static/table-sorting.js?v=0.3.55"></script>
 </body>
 </html>
