@@ -108,6 +108,7 @@ class Runtime:
                 config.license_vendor,
                 config.lsf_env,
                 license_sources=tuple({"server": source.server, "vendor": source.vendor} for source in config.license_sources),
+                license_sample_interval_seconds=config.license_sample_interval_seconds,
             )
         else:
             collector = SetupCollector()
@@ -271,7 +272,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.50", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.51", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -462,14 +463,31 @@ def licenses(_: None = Depends(require_config_session)) -> list[dict]:
 
 @app.get("/api/licenses/status")
 def license_status(_: None = Depends(require_config_session)) -> dict[str, Any]:
-    """Return the authenticated 24-hour availability view for FlexNet collection."""
-    sla_data = runtime.sla()
-    component = next(item for item in sla_data["components"] if item["key"] == "licenses")
-    timeline = []
-    for item in sla_data["timeline"]:
-        status = "ok" if item["status"] == "ok" else "partial" if item["status"] == "partial" else "error"
-        timeline.append({"collected_at": item["collected_at"], "status": status, "error": item["error"]})
-    return {**component, "window_hours": sla_data["window_hours"], "timeline": timeline}
+    """Return one 24-hour, hourly availability timeline per configured server."""
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(hours=24)).isoformat()
+    history = runtime.db.license_history(runtime.config.cluster_name, since)
+    grouped: dict[str, dict[str, Any]] = {
+        source.server: {"server": source.server, "vendor": source.vendor, "rows": []}
+        for source in runtime.config.license_sources
+    }
+    for row in history:
+        server = str(row.get("server", ""))
+        grouped.setdefault(server, {"server": server, "vendor": row.get("vendor", ""), "rows": []})["rows"].append(row)
+    servers = []
+    for item in grouped.values():
+        timeline = []
+        for offset in range(24, 0, -1):
+            end = now - timedelta(hours=offset - 1)
+            start = now - timedelta(hours=offset)
+            candidates = [row for row in item["rows"] if start.isoformat() <= str(row.get("collected_at", "")) < end.isoformat()]
+            row = candidates[-1] if candidates else None
+            status = "ok" if row and row.get("status") == "ok" else "error" if row else "unknown"
+            timeline.append({"hour": start.isoformat(), "collected_at": row.get("collected_at") if row else "", "status": status, "error": row.get("expires_at", "") if row else ""})
+        observed = sum(slot["status"] != "unknown" for slot in timeline)
+        good = sum(slot["status"] == "ok" for slot in timeline)
+        servers.append({"server": item["server"], "vendor": item["vendor"], "availability_pct": round(good / observed * 100, 2) if observed else None, "observed_samples": observed, "good_samples": good, "timeline": timeline})
+    return {"window_hours": 24, "sample_interval_seconds": 3600, "servers": servers}
 
 
 @app.get("/api/alerts")

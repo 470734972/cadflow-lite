@@ -461,6 +461,7 @@ class LsfCollector(Collector):
         lsf_env: Optional[Mapping[str, str]] = None,
         runner: Optional[SafeRunner] = None,
         license_sources: Optional[Sequence[Mapping[str, str]]] = None,
+        license_sample_interval_seconds: int = 3600,
     ):
         self.runner = runner or SafeRunner(
             timeout,
@@ -473,6 +474,9 @@ class LsfCollector(Collector):
         self.license_sources = tuple(license_sources or (
             {"server": server, "vendor": license_vendor} for server in license_servers
         ))
+        self.license_sample_interval_seconds = license_sample_interval_seconds
+        self._license_cache: tuple[list[dict], list[str]] = ([], [])
+        self._last_license_sample = 0.0
 
     def preflight(self) -> dict[str, str]:
         return self.runner.check_available(["bjobs", "bqueues", "bhosts", "lsload"])
@@ -627,6 +631,9 @@ class LsfCollector(Collector):
 
     def _licenses(self) -> tuple[list[dict], list[str]]:
         """Collect one bounded service-health row per configured license server."""
+        now = __import__("time").monotonic()
+        if self._license_cache[0] and now - self._last_license_sample < self.license_sample_interval_seconds:
+            return self._license_cache
         rows: list[dict] = []
         warnings: list[str] = []
         for source in self.license_sources:
@@ -658,4 +665,6 @@ class LsfCollector(Collector):
             rows.append(row)
             if row["status"] != "ok":
                 warnings.append(f"FlexNet License: lmstat status check for {server}: {row['expires_at']}")
-        return rows, warnings
+        self._license_cache = (rows, warnings)
+        self._last_license_sample = now
+        return self._license_cache

@@ -25,6 +25,7 @@ class Settings:
     stale_after_seconds: int = _int_env("CADFLOW_STALE_AFTER_SECONDS", 0)
     db_retention_days: int = _int_env("CADFLOW_DB_RETENTION_DAYS", 7)
     db_max_size_mb: int = _int_env("CADFLOW_DB_MAX_SIZE_MB", 1024)
+    license_sample_interval_seconds: int = _int_env("CADFLOW_LICENSE_SAMPLE_INTERVAL_SECONDS", 3600)
     lsf_bin_dir: str = os.getenv("CADFLOW_LSF_BIN_DIR", "")
     # The executable location is site-specific and is entered in the Web
     # configuration page when LSF mode is enabled.
@@ -73,6 +74,7 @@ class RuntimeConfig:
     stale_after_seconds: int
     db_retention_days: int
     db_max_size_mb: int
+    license_sample_interval_seconds: int
     lsf_bin_dir: str
     lmstat_path: str
     license_sources: tuple[LicenseSource, ...]
@@ -82,7 +84,7 @@ class RuntimeConfig:
     def from_settings(cls, source: Settings) -> "RuntimeConfig":
         return cls(source.mode, source.cluster_name, source.collect_interval_seconds, source.command_timeout_seconds,
                    source.stale_after_seconds, source.db_retention_days, source.db_max_size_mb,
-                   source.lsf_bin_dir, source.lmstat_path,
+                   source.license_sample_interval_seconds, source.lsf_bin_dir, source.lmstat_path,
                    tuple(LicenseSource(server, source.license_vendor) for server in source.license_servers), {})
 
     @classmethod
@@ -122,7 +124,8 @@ class RuntimeConfig:
             str(data.get("mode", "demo")).lower(), str(data.get("cluster_name", "demo-cluster")).strip(),
             int(data.get("collect_interval_seconds", 300)), int(data.get("command_timeout_seconds", 45)),
             int(data.get("stale_after_seconds", 0)), int(data.get("db_retention_days", 7)),
-            int(data.get("db_max_size_mb", 1024)), str(data.get("lsf_bin_dir", "")).strip(),
+            int(data.get("db_max_size_mb", 1024)), int(data.get("license_sample_interval_seconds", 3600)),
+            str(data.get("lsf_bin_dir", "")).strip(),
             str(data.get("lmstat_path", "")).strip(), tuple(sources), allowed,
         )
         config.validate()
@@ -141,6 +144,8 @@ class RuntimeConfig:
             raise ValueError("database retention days must be zero or greater")
         if self.db_max_size_mb < 0:
             raise ValueError("database maximum size must be zero or greater")
+        if self.license_sample_interval_seconds < 300:
+            raise ValueError("license sample interval must be at least 300 seconds")
         if self.mode == "lsf" and not self.lsf_bin_dir:
             raise ValueError("lsf_bin_dir is required in lsf mode")
 

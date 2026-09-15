@@ -407,5 +407,18 @@ class Database:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def license_history(self, cluster: str, since: str) -> list[dict[str, Any]]:
+        """Return compact per-server License health rows for a time window."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.collected_at, l.server, l.vendor, l.status, l.expires_at
+                FROM licenses l JOIN snapshots s ON s.id=l.snapshot_id
+                WHERE s.cluster=? AND s.collected_at>=?
+                ORDER BY s.collected_at ASC, s.id ASC
+                """, (cluster, since),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def dump_debug(self, cluster: str) -> str:
         return json.dumps({table: self.latest_rows(table, cluster) for table in ("jobs", "queues", "hosts", "licenses")})
