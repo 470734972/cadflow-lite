@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ncc CAD Flow</title>
-  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.47">
-  <link rel="stylesheet" href="/static/style.css?v=0.3.47">
+  <link rel="icon" type="image/png" href="/static/ncc-favicon.png?v=0.3.48">
+  <link rel="stylesheet" href="/static/style.css?v=0.3.48">
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">
-      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.47" alt="NCC">
+      <img class="brand-logo" src="/static/ncc-logo.png?v=0.3.48" alt="NCC">
       <div class="brand-copy"><b>Ncc CAD Flow</b><small>EDA Compute Insight</small></div>
     </div>
     <nav>
@@ -87,13 +87,15 @@
             <label class="textarea-label">LSF 环境变量<textarea name="lsf_env" rows="7" placeholder="LSF_ENVDIR=/path/to/lsf/conf&#10;PATH=/path/to/lsf/bin:$PATH"></textarea><small>每行一个 KEY=VALUE；只允许 LSF_*、PATH、LD_LIBRARY_PATH。</small></label>
           </section>
 
-          <section class="config-section collector-section flexnet-section">
-            <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License</h3><p>仅检查 License Server 与已配置 Vendor 的服务状态，不采集 Feature 明细。</p></div></div>
-            <label>lmstat 完整路径<input name="lmstat_path" placeholder="/path/to/lmstat"><small>填写现场可执行 lmstat 的绝对路径。</small></label>
-            <label>License Servers<input name="license_servers" placeholder="27000@license01,27000@license02"><small>多个服务器以英文逗号分隔。</small></label>
-            <label>License Vendors（英文 daemon 名称）<input name="license_vendor" placeholder="snpslmd,cdslmd"><small>用于检查对应 Vendor daemon 是否 UP；可填多个，使用英文逗号分隔，例如 snpslmd,cdslmd。不要使用顿号或空格。</small></label>
-          </section>
         </div>
+
+        <section class="config-section flexnet-section">
+          <div class="section-heading"><div class="section-icon">FN</div><div><h3>FlexNet License 配置</h3><p>单独维护每台 License Server；可逐条新增、修改或删除，不采集 Feature 明细。</p></div></div>
+          <label>lmstat 完整路径<input name="lmstat_path" placeholder="/path/to/lmstat"><small>所有 License Server 共用的 lmstat 可执行文件绝对路径。</small></label>
+          <div class="license-source-heading"><strong>License Server 列表</strong><button id="addLicenseSource" type="button" class="secondary-button">新增 License Server</button></div>
+          <div id="licenseSourceRows" class="license-source-list"></div>
+          <small class="retention-note">每条记录可单独设置端口@服务器和要检查的 Vendor daemon；删除后下次采集不再检查该服务器。</small>
+        </section>
 
         <section class="config-section schedule-section">
           <div class="section-heading"><div class="section-icon">04</div><div><h3>采集策略</h3><p>控制采集频率、命令等待时间和数据时效判定。</p></div></div>
@@ -126,8 +128,8 @@
       <div class="auth-actions"><button id="configAuthCancel" type="button" class="secondary-button">取消</button><button type="submit">验证并进入</button></div>
     </form>
   </div>
-  <script src="/static/app.js?v=0.3.47"></script>
-  <script src="/static/pending-jobs.js?v=0.3.47"></script>
-  <script src="/static/table-sorting.js?v=0.3.47"></script>
+  <script src="/static/app.js?v=0.3.48"></script>
+  <script src="/static/pending-jobs.js?v=0.3.48"></script>
+  <script src="/static/table-sorting.js?v=0.3.48"></script>
 </body>
 </html>

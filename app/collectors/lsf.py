@@ -460,6 +460,7 @@ class LsfCollector(Collector):
         license_vendor: str = "",
         lsf_env: Optional[Mapping[str, str]] = None,
         runner: Optional[SafeRunner] = None,
+        license_sources: Optional[Sequence[Mapping[str, str]]] = None,
     ):
         self.runner = runner or SafeRunner(
             timeout,
@@ -469,6 +470,9 @@ class LsfCollector(Collector):
         )
         self.license_servers = license_servers
         self.license_vendor = license_vendor
+        self.license_sources = tuple(license_sources or (
+            {"server": server, "vendor": license_vendor} for server in license_servers
+        ))
 
     def preflight(self) -> dict[str, str]:
         return self.runner.check_available(["bjobs", "bqueues", "bhosts", "lsload"])
@@ -625,10 +629,12 @@ class LsfCollector(Collector):
         """Collect one bounded service-health row per configured license server."""
         rows: list[dict] = []
         warnings: list[str] = []
-        for server in self.license_servers:
+        for source in self.license_sources:
+            server = str(source.get("server", "")).strip()
+            vendor = str(source.get("vendor", "")).strip()
             try:
                 output = self.runner.run(["lmstat", "-c", server, "-s"])
-                row = parse_lmstat_server_status(output, server, self.license_vendor)
+                row = parse_lmstat_server_status(output, server, vendor)
                 # FlexNet 11.14 (used by some legacy EDA tool bundles) accepts
                 # ``-s`` but omits the "license server UP" header.  Retrying
                 # with the portable ``-a`` form is only a compatibility path:
@@ -636,10 +642,10 @@ class LsfCollector(Collector):
                 # still store exactly one health row, never Feature records.
                 if row["expires_at"] == "lmstat did not report license server UP":
                     legacy_output = self.runner.run(["lmstat", "-a", "-c", server])
-                    row = parse_lmstat_server_status(legacy_output, server, self.license_vendor)
+                    row = parse_lmstat_server_status(legacy_output, server, vendor)
             except CommandError as exc:
                 row = {
-                    "server": server, "vendor": self.license_vendor, "feature": "License Server",
+                    "server": server, "vendor": vendor, "feature": "License Server",
                     "total": 0, "used": 0, "expires_at": str(exc), "status": "critical",
                 }
             rows.append(row)

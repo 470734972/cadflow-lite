@@ -135,6 +135,24 @@ def test_parse_lmstat_server_status_marks_down_vendor_critical():
     assert row["expires_at"] == "Vendor daemon DOWN: snpslmd"
 
 
+def test_license_sources_keep_vendors_independent():
+    from app.config import RuntimeConfig
+
+    config = RuntimeConfig.from_dict({
+        "mode": "demo", "cluster_name": "demo", "collect_interval_seconds": 60,
+        "command_timeout_seconds": 20, "stale_after_seconds": 0, "db_retention_days": 7,
+        "db_max_size_mb": 1024, "lsf_bin_dir": "", "lmstat_path": "/tools/lmstat",
+        "license_sources": [
+            {"server": "27000@rd1", "vendor": "snpslmd"},
+            {"server": "5280@rd2", "vendor": "cdslmd"},
+        ], "lsf_env": {},
+    })
+    assert config.to_dict()["license_sources"] == [
+        {"server": "27000@rd1", "vendor": "snpslmd"},
+        {"server": "5280@rd2", "vendor": "cdslmd"},
+    ]
+
+
 def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
     class LicenseRunner:
         def __init__(self):

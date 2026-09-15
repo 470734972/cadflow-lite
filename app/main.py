@@ -107,6 +107,7 @@ class Runtime:
                 config.lsf_bin_dir,
                 config.license_vendor,
                 config.lsf_env,
+                license_sources=tuple({"server": source.server, "vendor": source.vendor} for source in config.license_sources),
             )
         else:
             collector = SetupCollector()
@@ -270,7 +271,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.47", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.48", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
