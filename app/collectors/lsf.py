@@ -633,7 +633,10 @@ class LsfCollector(Collector):
             server = str(source.get("server", "")).strip()
             vendor = str(source.get("vendor", "")).strip()
             try:
-                output = self.runner.run(["lmstat", "-c", server, "-s"])
+                # Keep the option order used by the site's FlexNet 11.14
+                # client; unlike modern lmstat builds, this legacy binary can
+                # produce a different summary when -c precedes -s.
+                output = self.runner.run(["lmstat", "-s", "-c", server])
                 row = parse_lmstat_server_status(output, server, vendor)
                 # FlexNet 11.14 (used by some legacy EDA tool bundles) accepts
                 # ``-s`` but omits the "license server UP" header.  Retrying

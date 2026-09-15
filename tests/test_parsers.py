@@ -160,7 +160,7 @@ def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
 
         def run(self, argv):
             self.commands.append(argv)
-            if argv == ["lmstat", "-c", "27000@rd1", "-s"]:
+            if argv == ["lmstat", "-s", "-c", "27000@rd1"]:
                 return "Vendor daemon status (on rd1):\n  snpslmd: DOWN\n"
             if argv == ["lmstat", "-a", "-c", "27000@rd1"]:
                 return (
@@ -180,7 +180,7 @@ def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
 
     assert rows == [{"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"}]
     assert warnings == []
-    assert runner.commands == [["lmstat", "-c", "27000@rd1", "-s"], ["lmstat", "-a", "-c", "27000@rd1"]]
+    assert runner.commands == [["lmstat", "-s", "-c", "27000@rd1"], ["lmstat", "-a", "-c", "27000@rd1"]]
 
 
 def test_collection_failure_detail_identifies_failed_data_source():
@@ -254,7 +254,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert ["bjobs", "-p", "-u", "all", "-noheader", "-o", "jobid user stat queue from_host exec_host job_name submit_time slots max_mem run_time proj_name delimiter='|'"] in runner.commands
     assert ["bjobs", "-p", "-u", "all"] in runner.commands
     assert ["lsload", "-o", "HOST_NAME status r1m r15m ut tmp swp mem delimiter='|'"] in runner.commands
-    assert ["lmstat", "-c", "27000@license-host", "-s"] in runner.commands
+    assert ["lmstat", "-s", "-c", "27000@license-host"] in runner.commands
 
 
 def test_lsf_collection_keeps_hosts_when_flexnet_is_unavailable():
