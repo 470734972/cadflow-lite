@@ -36,3 +36,15 @@ def test_current_details_are_retained_while_history_uses_compact_metrics(tmp_pat
 
     assert [job["job_id"] for job in db.latest_rows("jobs", "eda")] == ["2"]
     assert [(row["running"], row["pending"]) for row in db.history("eda")] == [(1, 0), (0, 1)]
+
+
+def test_license_status_history_retains_one_service_row_per_hour_after_detail_trim(tmp_path):
+    db = Database(tmp_path / "cadflow.db")
+    db.initialize()
+    service = lambda status: [{"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": status}]
+    for when, status in (("2026-09-15T01:01:00+00:00", "ok"), ("2026-09-15T01:59:00+00:00", "critical"), ("2026-09-15T02:01:00+00:00", "ok")):
+        db.save_snapshot("eda", when, {"jobs": [], "queues": [], "hosts": [], "licenses": service(status)})
+    history = db.license_history("eda", "2026-09-15T01:00:00+00:00")
+    assert [(row["collected_at"], row["status"]) for row in history] == [
+        ("2026-09-15T01:59:00+00:00", "critical"), ("2026-09-15T02:01:00+00:00", "ok"),
+    ]

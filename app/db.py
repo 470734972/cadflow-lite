@@ -98,6 +98,20 @@ CREATE TABLE IF NOT EXISTS licenses (
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
+-- One compact License service-health row per server per UTC hour. Unlike
+-- detailed snapshot rows, this table survives detail trimming so the web UI
+-- can always render its complete 24-hour availability window.
+CREATE TABLE IF NOT EXISTS license_status_history (
+    cluster TEXT NOT NULL,
+    hour_start TEXT NOT NULL,
+    server TEXT NOT NULL,
+    vendor TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    expires_at TEXT NOT NULL DEFAULT '',
+    collected_at TEXT NOT NULL,
+    PRIMARY KEY(cluster, hour_start, server)
+);
+
 -- Detailed rows are retained for the current snapshot only.  Historical
 -- dashboard charts use this compact table instead of copying every job row.
 CREATE TABLE IF NOT EXISTS snapshot_metrics (
@@ -114,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_snapshot ON jobs(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_queues_snapshot ON queues(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_hosts_snapshot ON hosts(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_licenses_snapshot ON licenses(snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_license_status_history_cluster_hour ON license_status_history(cluster, hour_start DESC);
 """
 
 
@@ -193,6 +208,7 @@ class Database:
             self._insert_many(conn, "queues", snapshot_id, payload.get("queues", []))
             self._insert_many(conn, "hosts", snapshot_id, payload.get("hosts", []))
             self._insert_many(conn, "licenses", snapshot_id, payload.get("licenses", []))
+            self._save_license_status_history(conn, cluster, collected_at, payload.get("licenses", []))
             self._save_metrics(conn, snapshot_id, payload)
             # Keep a single old detailed snapshot being reclaimed per run.  It
             # bounds write-lock time even when upgrading an existing large DB;
@@ -250,6 +266,7 @@ class Database:
                         placeholders = ",".join("?" for _ in old_ids)
                         cursor = conn.execute(f"DELETE FROM snapshots WHERE id IN ({placeholders})", old_ids)
                         deleted += max(0, int(cursor.rowcount))
+                    conn.execute("DELETE FROM license_status_history WHERE cluster=? AND hour_start < ?", (cluster, cutoff))
                 conn.commit()
 
                 size_bytes = self._database_size_bytes()
@@ -333,6 +350,24 @@ class Database:
         )
 
     @staticmethod
+    def _save_license_status_history(conn: sqlite3.Connection, cluster: str, collected_at: str, rows: Iterable[dict[str, Any]]) -> None:
+        timestamp = datetime.fromisoformat(collected_at.replace("Z", "+00:00")).astimezone(timezone.utc)
+        hour_start = timestamp.replace(minute=0, second=0, microsecond=0).isoformat()
+        service_rows = [row for row in rows if str(row.get("feature", "")) == "License Server"]
+        if not service_rows:
+            return
+        conn.executemany(
+            """
+            INSERT INTO license_status_history(cluster, hour_start, server, vendor, status, expires_at, collected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cluster, hour_start, server) DO UPDATE SET
+                vendor=excluded.vendor, status=excluded.status,
+                expires_at=excluded.expires_at, collected_at=excluded.collected_at
+            """,
+            [[cluster, hour_start, str(row.get("server", "")), str(row.get("vendor", "")), str(row.get("status", "unknown")), str(row.get("expires_at", "")), collected_at] for row in service_rows],
+        )
+
+    @staticmethod
     def _trim_one_detail_snapshot(conn: sqlite3.Connection, cluster: str, current_snapshot_id: int) -> None:
         row = conn.execute(
             """
@@ -412,10 +447,10 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT s.collected_at, l.server, l.vendor, l.status, l.expires_at
-                FROM licenses l JOIN snapshots s ON s.id=l.snapshot_id
-                WHERE s.cluster=? AND s.collected_at>=?
-                ORDER BY s.collected_at ASC, s.id ASC
+                SELECT collected_at, server, vendor, status, expires_at
+                FROM license_status_history
+                WHERE cluster=? AND hour_start>=?
+                ORDER BY hour_start ASC, collected_at ASC
                 """, (cluster, since),
             ).fetchall()
             return [dict(row) for row in rows]
