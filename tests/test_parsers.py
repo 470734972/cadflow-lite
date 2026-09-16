@@ -301,7 +301,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
                 return "2|bob|PEND|normal|login02|-|waiting_job|2026-07-22T10:31:00+00:00|1|-|-|-\n"
             if argv == ["bqueues", "-l"]:
                 return "QUEUE: normal\n  HOSTS:  /dy/\n"
-            if argv == ["bmgroup", "-r", "-w"]:
+            if argv == ["bmgroup"]:
                 return "GROUP_NAME HOSTS\n/dy compute01 compute02\n"
             outputs = {
                 "bjobs": "1|alice|RUN|normal|login01|compute01|vcs_compile_top|2026-07-22T10:30:00+00:00|8|12G|01:00:00|orion\n",

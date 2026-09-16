@@ -293,7 +293,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.71", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.72", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

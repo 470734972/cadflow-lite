@@ -275,7 +275,7 @@ def parse_bqueues_hosts(text: str) -> dict[str, str]:
 
 
 def parse_bmgroup_hosts(text: str) -> dict[str, list[str]]:
-    """Parse recursively expanded host groups from ``bmgroup -r -w``.
+    """Parse host groups from the portable ``bmgroup`` table.
 
     LSF prints host groups as a two-column whitespace table.  Host groups are
     commonly written with a leading slash (``/gpu``); the normalizer in the
@@ -631,13 +631,22 @@ class LsfCollector(Collector):
         return list(jobs.values())
 
     def _host_groups(self) -> dict[str, list[str]]:
-        """Return recursively expanded LSF host groups when available."""
-        try:
-            return parse_bmgroup_hosts(self.runner.run(["bmgroup", "-r", "-w"]))
-        except (CommandError, ParseError):
-            # Groups enrich the node and queue views only; they must not make
-            # core scheduler collection fail on older LSF deployments.
-            return {}
+        """Return host groups, preferring the portable command form.
+
+        Some LSF 10.1 installations accept ``bmgroup -r -w`` but return no
+        membership rows.  The unqualified command is the documented form and
+        is what operators use interactively, so it is the source of truth.
+        """
+        for command in (["bmgroup"], ["bmgroup", "-r", "-w"]):
+            try:
+                groups = parse_bmgroup_hosts(self.runner.run(command))
+                if groups:
+                    return groups
+            except (CommandError, ParseError):
+                pass
+        # Groups enrich the node and queue views only; they must not make core
+        # scheduler collection fail on older LSF deployments.
+        return {}
 
     def _queues(
         self,
