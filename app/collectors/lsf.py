@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import signal
+from collections import Counter
 from pathlib import Path
 from typing import Mapping, Optional, Sequence, Union
 
@@ -131,6 +132,25 @@ def parse_duration_seconds(value: str) -> int:
         return hours * 3600 + minutes * 60 + seconds
     days, hours, minutes, seconds = numbers
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def summarize_exec_hosts(value: str) -> str:
+    """Collapse LSF's per-slot execution-host list into a readable summary."""
+    raw = value.strip().strip("<>")
+    if not raw or raw in {"-", "N/A"}:
+        return "-"
+    counts: Counter[str] = Counter()
+    for token in re.split(r"[\s,:]+", raw):
+        token = token.strip("<>{}[]")
+        if not token:
+            continue
+        match = re.fullmatch(r"(?P<host>[A-Za-z0-9_.-]+)(?:\*(?P<count>\d+))?", token)
+        if not match:
+            # Preserve an unfamiliar LSF representation instead of dropping
+            # scheduling information that an operator may need to inspect.
+            return raw
+        counts[match.group("host")] += int(match.group("count") or 1)
+    return " · ".join(f"{host} × {count}" for host, count in counts.items()) or "-"
 
 
 def parse_pipe_table(text: str, columns: list[str], embedded_delimiter_index: Optional[int] = None) -> list[dict[str, str]]:
@@ -599,7 +619,7 @@ class LsfCollector(Collector):
         for row in parsed_rows:
             jobs[row["job_id"]] = {
                 "job_id": row["job_id"], "user": row["user"], "status": row["status"], "queue": row["queue"],
-                "submit_host": row["submit_host"] or "-", "exec_host": row["exec_host"] or "-",
+                "submit_host": row["submit_host"] or "-", "exec_host": summarize_exec_hosts(row["exec_host"]),
                 "job_name": row["job_name"], "submit_time": row["submit_time"], "slots": max(1, int(_number(row["slots"], 1))),
                 # LSF max_mem is measured usage, not an rusage[mem] request. Keep request unknown rather than invent it.
                 "requested_mem_mb": 0, "used_mem_mb": _number(row["max_mem"]), "cpu_efficiency": 0,

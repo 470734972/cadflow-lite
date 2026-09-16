@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_feature_summary, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_feature_summary, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table, summarize_exec_hosts
 from app.main import collection_failure_detail
 
 
@@ -113,6 +113,12 @@ def test_parse_lmstat():
     text = "Users of VCS:  (Total of 120 licenses issued;  Total of 108 licenses in use)"
     rows = parse_lmstat(text, "27000@license01")
     assert rows == [{"server": "27000@license01", "vendor": "", "feature": "VCS", "total": 120, "used": 108, "expires_at": "", "status": "warning"}]
+
+
+def test_summarize_exec_hosts_collapses_per_slot_host_names():
+    assert summarize_exec_hosts("rd21:rd21:rd21:rd21") == "rd21 × 4"
+    assert summarize_exec_hosts("rd74*32 rd73*32") == "rd74 × 32 · rd73 × 32"
+    assert summarize_exec_hosts("-") == "-"
 
 
 def test_parse_lmstat_includes_node_locked_inventory():
