@@ -1,6 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ["CADFLOW_MODE"] = "demo"
 TEST_DB_PATH = Path(tempfile.gettempdir()) / f"cadflow-lite-test-{os.getpid()}.db"
@@ -27,7 +28,7 @@ def test_health_and_summary():
             assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.66"
+        assert health.json()["version"] == "0.3.67"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         assert client.put("/api/license-config", json={"lmstat_path": "/tools/lmstat", "license_sources": [{"server": "27000@rd1", "vendor": "snpslmd"}]}).status_code == 200
@@ -52,6 +53,24 @@ def test_health_and_summary():
         assert sla["window_hours"] == 24
         assert {"collection", "jobs", "queues", "hosts", "licenses"} == {item["key"] for item in sla["components"]}
         assert client.get("/metrics").status_code == 200
+
+
+def test_license_status_hides_history_for_deleted_server(monkeypatch):
+    class FakeDb:
+        def license_history(self, cluster, since):
+            return [
+                {"server": "27000@rd1", "vendor": "snps", "status": "ok", "expires_at": "License server UP", "collected_at": "2026-09-16T01:00:00+00:00"},
+                {"server": "59001@rd1", "vendor": "empyread", "status": "ok", "expires_at": "License server UP", "collected_at": "2026-09-16T01:00:00+00:00"},
+            ]
+
+    monkeypatch.setattr(main_module.runtime, "config", SimpleNamespace(
+        cluster_name="eda", license_sources=(SimpleNamespace(server="27000@rd1", vendor="snps"),),
+    ))
+    monkeypatch.setattr(main_module.runtime, "db", FakeDb())
+
+    result = main_module.license_status(None)
+
+    assert [item["server"] for item in result["servers"]] == ["27000@rd1"]
 
 
 def test_users_are_aggregated_from_current_jobs():

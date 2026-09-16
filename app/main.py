@@ -284,7 +284,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.66", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.67", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -487,13 +487,18 @@ def license_status(_: None = Depends(require_config_session)) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     since = (now - timedelta(hours=24)).isoformat()
     history = runtime.db.license_history(runtime.config.cluster_name, since)
+    # Configuration is authoritative.  Historical rows are deliberately kept
+    # for a configured server's 24-hour availability, but removing a server
+    # from configuration must make it disappear immediately rather than let
+    # old history recreate it in the page.
     grouped: dict[str, dict[str, Any]] = {
         source.server: {"server": source.server, "vendor": source.vendor, "rows": []}
         for source in runtime.config.license_sources
     }
     for row in history:
         server = str(row.get("server", ""))
-        grouped.setdefault(server, {"server": server, "vendor": row.get("vendor", ""), "rows": []})["rows"].append(row)
+        if server in grouped:
+            grouped[server]["rows"].append(row)
     servers = []
     for item in grouped.values():
         timeline = []

@@ -477,6 +477,33 @@ def parse_lmstat_server_status(text: str, server: str, vendor: str = "") -> dict
     }
 
 
+def parse_lmstat_feature_summary(text: str) -> dict[str, Union[str, int]]:
+    """Return only aggregate Feature metadata from a full ``lmstat`` report.
+
+    The report itself can contain tens of thousands of Feature entries.  It is
+    deliberately discarded after this parser runs: CADFlow retains just the
+    count and one expiry string that lmstat explicitly reports.
+    """
+    feature_names = {
+        name.strip()
+        for name in re.findall(r"^\s*Users of\s+([^:]+):", text, re.I | re.M)
+        if name.strip()
+    }
+    expiry_values: list[str] = []
+    for value in re.findall(
+        r"\b(?:expires?|expiration(?:\s+date)?)\s*(?:date)?\s*[:=]\s*([^\r\n,;]+)",
+        text,
+        re.I,
+    ):
+        normalized = " ".join(value.strip().split())
+        if normalized and normalized.lower() not in {"none", "n/a", "unknown"}:
+            expiry_values.append(normalized)
+    # lmstat commonly omits expiry information entirely.  Say so explicitly
+    # rather than guessing from a license-file path or expanding Feature rows.
+    expiry_summary = expiry_values[0] if expiry_values else "lmstat 未报告到期时间"
+    return {"feature_count": len(feature_names), "expiry_summary": expiry_summary}
+
+
 class LsfCollector(Collector):
     """Collector for an existing, authorised IBM Spectrum LSF client installation."""
 
@@ -669,13 +696,23 @@ class LsfCollector(Collector):
             server = str(source.get("server", "")).strip()
             vendor = str(source.get("vendor", "")).strip()
             try:
-                # One bounded service-health probe only: no Feature inventory.
+                # Service health remains the source of truth.  The additional
+                # report is parsed into two aggregate values only, then thrown
+                # away; no Feature detail is stored in SQLite or sent to UI.
                 output = self.runner.run(["lmstat", "-s", "-c", server])
                 row = parse_lmstat_server_status(output, server, vendor)
+                if row["status"] == "ok":
+                    try:
+                        row.update(parse_lmstat_feature_summary(self.runner.run(["lmstat", "-a", "-c", server])))
+                    except CommandError:
+                        row.update({"feature_count": -1, "expiry_summary": "Feature 摘要未获取"})
+                else:
+                    row.update({"feature_count": -1, "expiry_summary": "Feature 摘要未获取"})
             except CommandError as exc:
                 row = {
                     "server": server, "vendor": vendor, "feature": "License Server",
                     "total": 0, "used": 0, "expires_at": str(exc), "status": "critical",
+                    "feature_count": -1, "expiry_summary": "Feature 摘要未获取",
                 }
             rows.append(row)
             if row["status"] != "ok":

@@ -97,8 +97,9 @@ main { width:auto; max-width:none; margin-left:228px; padding:28px 34px 48px; } 
 .license-service-name small { max-width:100%; }
 .license-hour-bars { margin:0; min-height:14px; }
 .license-hour-bars i { flex-basis:6px; width:6px; height:13px; }
-.license-availability-summary { display:grid; justify-items:end; gap:3px; min-width:78px; }
+.license-availability-summary { display:grid; justify-items:end; gap:3px; min-width:152px; }
 .license-availability-summary strong { color:var(--cyan); font-size:12px; white-space:nowrap; }
 .license-availability-summary small { color:var(--muted); font-size:10px; white-space:nowrap; }
+.license-availability-summary .license-summary-meta { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
 .license-health-dot.unknown { color:#fff; background:var(--muted); }
 @media(max-width:720px) { #licenses .panel { width:100%; }.license-history-card { grid-template-columns:1fr auto; row-gap:8px; }.license-hour-bars { grid-column:1 / -1; }.license-availability-summary { grid-column:2; grid-row:1; }.license-service-name small { max-width:calc(100vw - 160px); } }

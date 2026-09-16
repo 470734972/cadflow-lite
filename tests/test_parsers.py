@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
+from app.collectors.lsf import CommandError, LsfCollector, ParseError, SafeRunner, parse_bmgroup_hosts, parse_bqueues_hosts, parse_duration_seconds, parse_lmstat, parse_lmstat_feature_summary, parse_lmstat_server_status, parse_lshosts, parse_lsload, parse_pending_reasons, parse_pipe_table, parse_whitespace_table
 from app.main import collection_failure_detail
 
 
@@ -128,6 +128,16 @@ def test_parse_lmstat_server_status_without_feature_inventory():
     assert row == {"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"}
 
 
+def test_parse_lmstat_feature_summary_discards_feature_details():
+    summary = parse_lmstat_feature_summary(
+        "Users of VCS:  (Total of 12 licenses issued; Total of 1 licenses in use)\n"
+        "Users of VCS:  (Total of 12 licenses issued; Total of 1 licenses in use)\n"
+        "Users of DVE:  (Total of 4 licenses issued; Total of 0 licenses in use)\n"
+        "expiration date: 31-dec-2027\n"
+    )
+    assert summary == {"feature_count": 2, "expiry_summary": "31-dec-2027"}
+
+
 def test_parse_lmstat_server_status_marks_down_vendor_critical():
     row = parse_lmstat_server_status(
         "License server status: 27000@rd1\n  license server UP (MASTER) v11.19\n  snpslmd: DOWN\n",
@@ -181,7 +191,7 @@ def test_license_sources_keep_vendors_independent():
     ]
 
 
-def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
+def test_lsf_license_status_keeps_only_feature_summary():
     class LicenseRunner:
         def __init__(self):
             self.commands = []
@@ -189,7 +199,12 @@ def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
         def run(self, argv):
             self.commands.append(argv)
             if argv == ["lmstat", "-s", "-c", "27000@rd1"]:
-                return "Vendor daemon status (on rd1):\n  snpslmd: DOWN\n"
+                return (
+                    "License server status: 27000@rd1\n"
+                    "  license server UP (MASTER) v11.14\n"
+                    "Vendor daemon status (on rd1):\n"
+                    "  snpslmd: UP v11.14\n"
+                )
             if argv == ["lmstat", "-a", "-c", "27000@rd1"]:
                 return (
                     "License server status: 27000@rd1\n"
@@ -206,7 +221,7 @@ def test_lsf_license_status_falls_back_without_parsing_feature_inventory():
         20, "/path/to/lmstat", ("27000@rd1",), license_vendor="snpslmd", runner=runner
     )._licenses()
 
-    assert rows == [{"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "status": "ok"}]
+    assert rows == [{"server": "27000@rd1", "vendor": "snpslmd", "feature": "License Server", "total": 0, "used": 0, "expires_at": "License server UP", "feature_count": 1, "expiry_summary": "lmstat 未报告到期时间", "status": "ok"}]
     assert warnings == []
     assert runner.commands == [["lmstat", "-s", "-c", "27000@rd1"], ["lmstat", "-a", "-c", "27000@rd1"]]
 

@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS licenses (
     total INTEGER NOT NULL DEFAULT 0,
     used INTEGER NOT NULL DEFAULT 0,
     expires_at TEXT NOT NULL DEFAULT '',
+    feature_count INTEGER NOT NULL DEFAULT -1,
+    expiry_summary TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'ok',
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
@@ -108,6 +110,8 @@ CREATE TABLE IF NOT EXISTS license_status_history (
     vendor TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     expires_at TEXT NOT NULL DEFAULT '',
+    feature_count INTEGER NOT NULL DEFAULT -1,
+    expiry_summary TEXT NOT NULL DEFAULT '',
     collected_at TEXT NOT NULL,
     PRIMARY KEY(cluster, hour_start, server)
 );
@@ -153,6 +157,8 @@ class Database:
             self._migrate_jobs(conn)
             self._migrate_queues(conn)
             self._migrate_hosts(conn)
+            self._migrate_licenses(conn)
+            self._migrate_license_status_history(conn)
 
     @staticmethod
     def _migrate_jobs(conn: sqlite3.Connection) -> None:
@@ -195,6 +201,29 @@ class Database:
         for name, definition in migrations.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE queues ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _migrate_licenses(conn: sqlite3.Connection) -> None:
+        """Add compact Feature metadata without retaining Feature rows."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(licenses)")}
+        migrations = {
+            "feature_count": "INTEGER NOT NULL DEFAULT -1",
+            "expiry_summary": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE licenses ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _migrate_license_status_history(conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(license_status_history)")}
+        migrations = {
+            "feature_count": "INTEGER NOT NULL DEFAULT -1",
+            "expiry_summary": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE license_status_history ADD COLUMN {name} {definition}")
 
     def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0, warnings: Optional[list[str]] = None) -> int:
         with self._lock, self.connect() as conn:
@@ -358,13 +387,14 @@ class Database:
             return
         conn.executemany(
             """
-            INSERT INTO license_status_history(cluster, hour_start, server, vendor, status, expires_at, collected_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO license_status_history(cluster, hour_start, server, vendor, status, expires_at, feature_count, expiry_summary, collected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cluster, hour_start, server) DO UPDATE SET
                 vendor=excluded.vendor, status=excluded.status,
-                expires_at=excluded.expires_at, collected_at=excluded.collected_at
+                expires_at=excluded.expires_at, feature_count=excluded.feature_count,
+                expiry_summary=excluded.expiry_summary, collected_at=excluded.collected_at
             """,
-            [[cluster, hour_start, str(row.get("server", "")), str(row.get("vendor", "")), str(row.get("status", "unknown")), str(row.get("expires_at", "")), collected_at] for row in service_rows],
+            [[cluster, hour_start, str(row.get("server", "")), str(row.get("vendor", "")), str(row.get("status", "unknown")), str(row.get("expires_at", "")), int(row.get("feature_count", -1)), str(row.get("expiry_summary", "")), collected_at] for row in service_rows],
         )
 
     @staticmethod
@@ -447,7 +477,7 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT collected_at, server, vendor, status, expires_at
+                SELECT collected_at, server, vendor, status, expires_at, feature_count, expiry_summary
                 FROM license_status_history
                 WHERE cluster=? AND hour_start>=?
                 ORDER BY hour_start ASC, collected_at ASC
