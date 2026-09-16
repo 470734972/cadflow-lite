@@ -537,6 +537,12 @@ class LsfCollector(Collector):
     def preflight(self) -> dict[str, str]:
         return self.runner.check_available(["bjobs", "bqueues", "bhosts", "lsload"])
 
+    def job_detail(self, job_id: str) -> str:
+        """Return the read-only, operator-requested ``bjobs -l`` report."""
+        if not re.fullmatch(r"\d+(?:\[\d+\])?", job_id):
+            raise ValueError("invalid LSF job id")
+        return self.runner.run(["bjobs", "-l", job_id])
+
     def collect(self) -> dict[str, object]:
         self.preflight()
         hosts = self._hosts()

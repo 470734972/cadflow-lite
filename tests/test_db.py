@@ -48,3 +48,20 @@ def test_license_status_history_retains_one_service_row_per_hour_after_detail_tr
     assert [(row["collected_at"], row["status"]) for row in history] == [
         ("2026-09-15T01:59:00+00:00", "critical"), ("2026-09-15T02:01:00+00:00", "ok"),
     ]
+
+
+def test_terminal_jobs_are_retained_for_seven_days_independent_of_snapshots(tmp_path):
+    db = Database(tmp_path / "cadflow.db")
+    db.initialize()
+    seen = "2026-09-01T12:00:00+00:00"
+    db.save_snapshot("eda", seen, {
+        "jobs": [{"job_id": "42", "user": "alice", "status": "DONE", "queue": "q", "exec_host": "h"}],
+        "queues": [], "hosts": [], "licenses": [],
+    })
+    db.save_snapshot("eda", "2026-09-01T12:01:00+00:00", {"jobs": [], "queues": [], "hosts": [], "licenses": []})
+
+    assert [(row["job_id"], row["status"]) for row in db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00")] == [("42", "DONE")]
+
+    db.cleanup("eda", retention_days=0, max_size_mb=0, now=datetime(2026, 9, 8, 12, 1, tzinfo=timezone.utc))
+
+    assert db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00") == []

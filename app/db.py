@@ -100,6 +100,28 @@ CREATE TABLE IF NOT EXISTS licenses (
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
+-- Terminal job rows are compact, independent records.  They survive the
+-- normal current-snapshot trimming so operators can inspect recent DONE/EXIT
+-- work without retaining every RUN/PEND snapshot for a week.
+CREATE TABLE IF NOT EXISTS terminal_jobs (
+    cluster TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    user TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    queue TEXT NOT NULL DEFAULT '',
+    exec_host TEXT NOT NULL DEFAULT '',
+    submit_host TEXT NOT NULL DEFAULT '',
+    job_name TEXT NOT NULL DEFAULT '',
+    submit_time TEXT NOT NULL DEFAULT '',
+    slots INTEGER NOT NULL DEFAULT 1,
+    runtime_seconds INTEGER NOT NULL DEFAULT 0,
+    pending_reason TEXT NOT NULL DEFAULT '',
+    project TEXT NOT NULL DEFAULT '',
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY(cluster, job_id)
+);
+
 -- One compact License service-health row per server per UTC hour. Unlike
 -- detailed snapshot rows, this table survives detail trimming so the web UI
 -- can always render its complete 24-hour availability window.
@@ -132,6 +154,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_snapshot ON jobs(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_queues_snapshot ON queues(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_hosts_snapshot ON hosts(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_licenses_snapshot ON licenses(snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_terminal_jobs_cluster_seen ON terminal_jobs(cluster, last_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_license_status_history_cluster_hour ON license_status_history(cluster, hour_start DESC);
 """
 
@@ -237,6 +260,7 @@ class Database:
             self._insert_many(conn, "queues", snapshot_id, payload.get("queues", []))
             self._insert_many(conn, "hosts", snapshot_id, payload.get("hosts", []))
             self._insert_many(conn, "licenses", snapshot_id, payload.get("licenses", []))
+            self._save_terminal_jobs(conn, cluster, collected_at, payload.get("jobs", []))
             self._save_license_status_history(conn, cluster, collected_at, payload.get("licenses", []))
             self._save_metrics(conn, snapshot_id, payload)
             # Keep a single old detailed snapshot being reclaimed per run.  It
@@ -296,6 +320,10 @@ class Database:
                         cursor = conn.execute(f"DELETE FROM snapshots WHERE id IN ({placeholders})", old_ids)
                         deleted += max(0, int(cursor.rowcount))
                     conn.execute("DELETE FROM license_status_history WHERE cluster=? AND hour_start < ?", (cluster, cutoff))
+                # Terminal jobs have a fixed operator-requested 7-day window,
+                # independent of the configurable snapshot-detail retention.
+                terminal_cutoff = (now - timedelta(days=7)).isoformat()
+                conn.execute("DELETE FROM terminal_jobs WHERE cluster=? AND last_seen < ?", (cluster, terminal_cutoff))
                 conn.commit()
 
                 size_bytes = self._database_size_bytes()
@@ -359,6 +387,35 @@ class Database:
         placeholders = ",".join("?" for _ in columns)
         sql = f"INSERT INTO {table}(snapshot_id,{','.join(columns)}) VALUES (?,{placeholders})"
         conn.executemany(sql, [[snapshot_id, *[row.get(column) for column in columns]] for row in rows])
+
+    @staticmethod
+    def _save_terminal_jobs(conn: sqlite3.Connection, cluster: str, collected_at: str, rows: Iterable[dict[str, Any]]) -> None:
+        terminal_rows = [row for row in rows if str(row.get("status", "")).upper() in {"DONE", "EXIT"}]
+        if not terminal_rows:
+            return
+        conn.executemany(
+            """
+            INSERT INTO terminal_jobs(
+                cluster, job_id, user, status, queue, exec_host, submit_host,
+                job_name, submit_time, slots, runtime_seconds, pending_reason,
+                project, first_seen, last_seen
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cluster, job_id) DO UPDATE SET
+                user=excluded.user, status=excluded.status, queue=excluded.queue,
+                exec_host=excluded.exec_host, submit_host=excluded.submit_host,
+                job_name=excluded.job_name, submit_time=excluded.submit_time,
+                slots=excluded.slots, runtime_seconds=excluded.runtime_seconds,
+                pending_reason=excluded.pending_reason, project=excluded.project,
+                last_seen=excluded.last_seen
+            """,
+            [[
+                cluster, str(row.get("job_id", "")), str(row.get("user", "")), str(row.get("status", "")).upper(),
+                str(row.get("queue", "")), str(row.get("exec_host", "")), str(row.get("submit_host", "")),
+                str(row.get("job_name", "")), str(row.get("submit_time", "")), int(row.get("slots", 1) or 1),
+                int(row.get("runtime_seconds", 0) or 0), str(row.get("pending_reason", "")), str(row.get("project", "")),
+                collected_at, collected_at,
+            ] for row in terminal_rows],
+        )
 
     @staticmethod
     def _save_metrics(conn: sqlite3.Connection, snapshot_id: int, payload: dict[str, Any]) -> None:
@@ -431,6 +488,14 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute(f"SELECT * FROM {table} WHERE snapshot_id=?", (snapshot_id,)).fetchall()
             return [{key: row[key] for key in row.keys() if key != "snapshot_id"} for row in rows]
+
+    def terminal_jobs(self, cluster: str, since: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT job_id, user, status, queue, exec_host, submit_host, job_name, submit_time, slots, runtime_seconds, pending_reason, project, first_seen, last_seen FROM terminal_jobs WHERE cluster=? AND last_seen>=? ORDER BY last_seen DESC",
+                (cluster, since),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     def snapshot_status(self, cluster: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:

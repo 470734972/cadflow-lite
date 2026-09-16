@@ -226,6 +226,24 @@ def test_lsf_license_status_keeps_only_feature_summary():
     assert runner.commands == [["lmstat", "-s", "-c", "27000@rd1"], ["lmstat", "-a", "-c", "27000@rd1"]]
 
 
+def test_lsf_job_detail_uses_only_bjobs_long_format():
+    class DetailRunner:
+        def __init__(self):
+            self.commands = []
+
+        def run(self, argv):
+            self.commands.append(argv)
+            return "Job <123> details"
+
+    runner = DetailRunner()
+    detail = LsfCollector(20, "/path/to/lmstat", (), runner=runner).job_detail("123")
+
+    assert detail == "Job <123> details"
+    assert runner.commands == [["bjobs", "-l", "123"]]
+    with pytest.raises(ValueError):
+        LsfCollector(20, "/path/to/lmstat", (), runner=runner).job_detail("123; rm -rf /")
+
+
 def test_collection_failure_detail_identifies_failed_data_source():
     assert collection_failure_detail({"status": "error", "error": "required command is not executable: /path/to/lmstat"}) == {
         "component": "FlexNet License", "message": "required command is not executable: /path/to/lmstat",

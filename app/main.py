@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import re
 import subprocess
 import threading
 from contextlib import asynccontextmanager
@@ -196,6 +197,11 @@ class Runtime:
         with self._data_lock:
             return list(self._rows.get(table, []))
 
+    def job_detail(self, job_id: str) -> str:
+        if not isinstance(self.service.collector, LsfCollector):
+            raise ValueError("LSF 作业详情仅在 LSF 采集模式下可用")
+        return self.service.collector.job_detail(job_id)
+
     def summary(self) -> dict[str, Any]:
         with self._data_lock:
             return dict(self._summary)
@@ -284,7 +290,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.67", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.68", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -413,14 +419,21 @@ def jobs(
     queue: Optional[str] = None,
     limit: Optional[int] = Query(None, ge=1),
 ) -> list[dict]:
-    """Return jobs from the current snapshot.
+    """Return current jobs plus retained DONE/EXIT jobs from the last 7 days.
 
     By default the API returns the complete current snapshot, so the result
     count reflects what LSF reported instead of an application-imposed cap.
     Callers may still provide ``limit`` when they intentionally want a
     smaller response (for example, an external integration or CLI query).
     """
-    rows = runtime.rows("jobs")
+    current_rows = runtime.rows("jobs")
+    current_ids = {str(row.get("job_id", "")) for row in current_rows}
+    terminal_rows = [
+        {**row, "retained_terminal": True}
+        for row in runtime.db.terminal_jobs(runtime.config.cluster_name, (datetime.now(timezone.utc) - timedelta(days=7)).isoformat())
+        if str(row.get("job_id", "")) not in current_ids
+    ]
+    rows = [*current_rows, *terminal_rows]
     if status:
         requested_status = status.upper()
         if requested_status == "PEND":
@@ -437,6 +450,19 @@ def jobs(
     hidden_metrics = {"requested_mem_mb", "used_mem_mb", "cpu_efficiency"}
     selected = rows if limit is None else rows[:limit]
     return [{key: value for key, value in row.items() if key not in hidden_metrics} for row in selected]
+
+
+@app.get("/api/jobs/{job_id}/detail")
+def job_detail(job_id: str) -> dict[str, str]:
+    """Fetch one live LSF job report only when the operator opens its Job ID."""
+    if not re.fullmatch(r"\d+(?:\[\d+\])?", job_id):
+        raise HTTPException(status_code=422, detail="invalid LSF job id")
+    try:
+        return {"job_id": job_id, "detail": runtime.job_detail(job_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"bjobs -l failed: {exc}") from exc
 
 
 @app.get("/api/users")
