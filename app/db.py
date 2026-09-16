@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     free_mem_mb REAL NOT NULL DEFAULT 0,
     free_tmp_mb REAL NOT NULL DEFAULT 0,
     free_swap_mb REAL NOT NULL DEFAULT 0,
+    group_names TEXT NOT NULL DEFAULT '',
     FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
 );
 
@@ -208,6 +209,7 @@ class Database:
             "free_mem_mb": "REAL NOT NULL DEFAULT 0",
             "free_tmp_mb": "REAL NOT NULL DEFAULT 0",
             "free_swap_mb": "REAL NOT NULL DEFAULT 0",
+            "group_names": "TEXT NOT NULL DEFAULT ''",
         }
         for name, definition in migrations.items():
             if name not in columns:

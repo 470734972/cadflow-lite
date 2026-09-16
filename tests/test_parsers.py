@@ -326,6 +326,7 @@ def test_lsf_collector_uses_real_command_contract_without_inventing_requested_me
     assert any(job["status"] == "PEND" for job in payload["jobs"])
     assert next(job for job in payload["jobs"] if job["job_id"] == "2")["pending_reason"].startswith("User has reached")
     assert payload["hosts"][0]["cpu_pct"] == 72
+    assert payload["hosts"][0]["group_names"] == "dy"
     assert payload["hosts"][0]["total_mem_mb"] == 262144
     assert payload["hosts"][0]["free_tmp_mb"] == 0
     assert payload["licenses"][0]["vendor"] == "snpslmd"

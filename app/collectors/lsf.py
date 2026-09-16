@@ -565,8 +565,9 @@ class LsfCollector(Collector):
 
     def collect(self) -> dict[str, object]:
         self.preflight()
-        hosts = self._hosts()
-        payload: dict[str, object] = {"jobs": self._jobs(), "queues": self._queues([host["name"] for host in hosts]), "hosts": hosts, "licenses": []}
+        host_groups = self._host_groups()
+        hosts = self._hosts(host_groups)
+        payload: dict[str, object] = {"jobs": self._jobs(), "queues": self._queues([host["name"] for host in hosts], host_groups), "hosts": hosts, "licenses": []}
         if self.license_servers:
             try:
                 self.runner.check_available(["lmstat"])
@@ -629,7 +630,20 @@ class LsfCollector(Collector):
             }
         return list(jobs.values())
 
-    def _queues(self, host_names: Optional[Sequence[str]] = None) -> list[dict]:
+    def _host_groups(self) -> dict[str, list[str]]:
+        """Return recursively expanded LSF host groups when available."""
+        try:
+            return parse_bmgroup_hosts(self.runner.run(["bmgroup", "-r", "-w"]))
+        except (CommandError, ParseError):
+            # Groups enrich the node and queue views only; they must not make
+            # core scheduler collection fail on older LSF deployments.
+            return {}
+
+    def _queues(
+        self,
+        host_names: Optional[Sequence[str]] = None,
+        group_hosts: Optional[Mapping[str, Sequence[str]]] = None,
+    ) -> list[dict]:
         # LSF 10.1.0.0 does not support bqueues -o or -noheader. The standard
         # wide table is stable across the legacy and current command variants.
         parsed = parse_whitespace_table(self.runner.run(["bqueues", "-w"]), {"QUEUE_NAME", "STATUS", "MAX", "PEND", "RUN", "SUSP"})
@@ -639,12 +653,7 @@ class LsfCollector(Collector):
             # Queue host membership is optional enrichment. Older/site-specific
             # clients may not expose the long queue description.
             host_specs = {}
-        try:
-            group_hosts = parse_bmgroup_hosts(self.runner.run(["bmgroup", "-r", "-w"]))
-        except (CommandError, ParseError):
-            # Host-group expansion is optional. Keep the configured group name
-            # visible when bmgroup is unavailable instead of inventing hosts.
-            group_hosts = {}
+        group_hosts = group_hosts or {}
 
         def queue_hosts(name: str) -> list[str]:
             spec = host_specs.get(name, "").strip()
@@ -674,7 +683,7 @@ class LsfCollector(Collector):
             "host_names": json.dumps(queue_hosts(row["QUEUE_NAME"]), ensure_ascii=False),
         } for row in parsed]
 
-    def _hosts(self) -> list[dict]:
+    def _hosts(self, host_groups: Optional[Mapping[str, Sequence[str]]] = None) -> list[dict]:
         # Use the legacy-compatible standard table for the same reason as bqueues.
         hosts_output = self.runner.run(["bhosts", "-w"])
         # Request only the fields used by CADFlow with an explicit delimiter.
@@ -693,6 +702,14 @@ class LsfCollector(Collector):
             # lshosts; the UI will explicitly show that total memory is unknown.
             capacities = {}
         parsed = parse_whitespace_table(hosts_output, {"HOST_NAME", "STATUS", "MAX", "RUN"})
+        def normalized_host(value: str) -> str:
+            return value.strip().lower().split(".", 1)[0]
+
+        groups_by_host: dict[str, list[str]] = {}
+        for group, members in (host_groups or {}).items():
+            for member in members:
+                groups_by_host.setdefault(normalized_host(str(member)), []).append(str(group))
+
         hosts = []
         for row in parsed:
             name = row["HOST_NAME"]
@@ -708,6 +725,7 @@ class LsfCollector(Collector):
                 "load_1m": load.get("load_1m", 0), "load_15m": load.get("load_15m", 0),
                 "free_mem_mb": free_mem_mb, "free_tmp_mb": load.get("free_tmp_mb", 0),
                 "free_swap_mb": load.get("free_swap_mb", 0),
+                "group_names": ", ".join(dict.fromkeys(groups_by_host.get(normalized_host(name), []))),
             })
         return hosts
 
