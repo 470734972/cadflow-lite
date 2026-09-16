@@ -65,3 +65,19 @@ def test_terminal_jobs_are_retained_for_seven_days_independent_of_snapshots(tmp_
     db.cleanup("eda", retention_days=0, max_size_mb=0, now=datetime(2026, 9, 8, 12, 1, tzinfo=timezone.utc))
 
     assert db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00") == []
+
+
+def test_terminal_exit_detail_is_retained_without_overwriting_it(tmp_path):
+    db = Database(tmp_path / "cadflow.db")
+    db.initialize()
+    db.save_snapshot("eda", "2026-09-01T12:00:00+00:00", {
+        "jobs": [{"job_id": "77", "user": "alice", "status": "EXIT", "detail": "Job <77>\nExited with exit code 1"}],
+        "queues": [], "hosts": [], "licenses": [],
+    })
+    db.save_snapshot("eda", "2026-09-01T12:01:00+00:00", {
+        "jobs": [{"job_id": "77", "user": "alice", "status": "EXIT"}],
+        "queues": [], "hosts": [], "licenses": [],
+    })
+
+    assert db.terminal_job_detail("eda", "77") == "Job <77>\nExited with exit code 1"
+    assert db.terminal_job_ids_needing_detail("eda", ["77", "78"]) == {"78"}

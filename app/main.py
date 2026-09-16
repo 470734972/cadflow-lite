@@ -197,10 +197,13 @@ class Runtime:
         with self._data_lock:
             return list(self._rows.get(table, []))
 
-    def job_detail(self, job_id: str) -> str:
+    def job_detail(self, job_id: str) -> tuple[str, str]:
+        saved = self.db.terminal_job_detail(self.config.cluster_name, job_id)
+        if saved:
+            return saved, "retained"
         if not isinstance(self.service.collector, LsfCollector):
             raise ValueError("LSF 作业详情仅在 LSF 采集模式下可用")
-        return self.service.collector.job_detail(job_id)
+        return self.service.collector.job_detail(job_id), "live"
 
     def summary(self) -> dict[str, Any]:
         with self._data_lock:
@@ -290,7 +293,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.69", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.70", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -454,11 +457,14 @@ def jobs(
 
 @app.get("/api/jobs/{job_id}/detail")
 def job_detail(job_id: str) -> dict[str, str]:
-    """Fetch one live LSF job report only when the operator opens its Job ID."""
+    """Return a retained EXIT report, or query the current LSF report on demand."""
     if not re.fullmatch(r"\d+(?:\[\d+\])?", job_id):
         raise HTTPException(status_code=422, detail="invalid LSF job id")
     try:
-        return {"job_id": job_id, "detail": runtime.job_detail(job_id)}
+        detail, source = runtime.job_detail(job_id)
+        if not detail.strip():
+            detail = "LSF 未返回该 Job 的详情；此记录可能在启用终态详情保存前已结束，或已超出 LSF 历史保留期。"
+        return {"job_id": job_id, "detail": detail, "source": source}
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:

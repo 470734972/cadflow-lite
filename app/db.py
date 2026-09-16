@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS terminal_jobs (
     runtime_seconds INTEGER NOT NULL DEFAULT 0,
     pending_reason TEXT NOT NULL DEFAULT '',
     project TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
     PRIMARY KEY(cluster, job_id)
@@ -182,6 +183,7 @@ class Database:
             self._migrate_hosts(conn)
             self._migrate_licenses(conn)
             self._migrate_license_status_history(conn)
+            self._migrate_terminal_jobs(conn)
 
     @staticmethod
     def _migrate_jobs(conn: sqlite3.Connection) -> None:
@@ -247,6 +249,12 @@ class Database:
         for name, definition in migrations.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE license_status_history ADD COLUMN {name} {definition}")
+
+    @staticmethod
+    def _migrate_terminal_jobs(conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(terminal_jobs)")}
+        if "detail" not in columns:
+            conn.execute("ALTER TABLE terminal_jobs ADD COLUMN detail TEXT NOT NULL DEFAULT ''")
 
     def save_snapshot(self, cluster: str, collected_at: str, payload: dict[str, Any], duration_ms: int = 0, warnings: Optional[list[str]] = None) -> int:
         with self._lock, self.connect() as conn:
@@ -398,14 +406,15 @@ class Database:
             INSERT INTO terminal_jobs(
                 cluster, job_id, user, status, queue, exec_host, submit_host,
                 job_name, submit_time, slots, runtime_seconds, pending_reason,
-                project, first_seen, last_seen
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                project, detail, first_seen, last_seen
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cluster, job_id) DO UPDATE SET
                 user=excluded.user, status=excluded.status, queue=excluded.queue,
                 exec_host=excluded.exec_host, submit_host=excluded.submit_host,
                 job_name=excluded.job_name, submit_time=excluded.submit_time,
                 slots=excluded.slots, runtime_seconds=excluded.runtime_seconds,
                 pending_reason=excluded.pending_reason, project=excluded.project,
+                detail=CASE WHEN excluded.detail<>'' THEN excluded.detail ELSE terminal_jobs.detail END,
                 last_seen=excluded.last_seen
             """,
             [[
@@ -413,7 +422,7 @@ class Database:
                 str(row.get("queue", "")), str(row.get("exec_host", "")), str(row.get("submit_host", "")),
                 str(row.get("job_name", "")), str(row.get("submit_time", "")), int(row.get("slots", 1) or 1),
                 int(row.get("runtime_seconds", 0) or 0), str(row.get("pending_reason", "")), str(row.get("project", "")),
-                collected_at, collected_at,
+                str(row.get("detail", ""))[:200_000], collected_at, collected_at,
             ] for row in terminal_rows],
         )
 
@@ -496,6 +505,30 @@ class Database:
                 (cluster, since),
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def terminal_job_ids_needing_detail(self, cluster: str, job_ids: Iterable[str]) -> set[str]:
+        ids = list(dict.fromkeys(str(job_id) for job_id in job_ids if job_id))
+        missing: set[str] = set()
+        with self.connect() as conn:
+            for offset in range(0, len(ids), 500):
+                batch = ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in batch)
+                existing = {
+                    str(row["job_id"])
+                    for row in conn.execute(
+                        f"SELECT job_id FROM terminal_jobs WHERE cluster=? AND job_id IN ({placeholders}) AND detail<>''",
+                        [cluster, *batch],
+                    ).fetchall()
+                }
+                missing.update(set(batch) - existing)
+        return missing
+
+    def terminal_job_detail(self, cluster: str, job_id: str) -> str:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT detail FROM terminal_jobs WHERE cluster=? AND job_id=?", (cluster, job_id)
+            ).fetchone()
+            return str(row["detail"]) if row and row["detail"] else ""
 
     def snapshot_status(self, cluster: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:
