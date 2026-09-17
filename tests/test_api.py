@@ -28,12 +28,17 @@ def test_health_and_summary():
             assert 'id="overview"' in page.text
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.3.74"
+        assert health.json()["version"] == "0.3.75"
         assert client.get("/api/config").status_code == 401
         assert client.post("/api/config/auth", json={"password": "config-pass"}).status_code == 200
         assert client.put("/api/license-config", json={"lmstat_path": "/tools/lmstat", "license_sources": [{"server": "27000@rd1", "vendor": "snpslmd"}]}).status_code == 200
+        # The LSF form does not submit FlexNet fields. Saving it must retain
+        # the independently managed FlexNet configuration.
+        assert client.put("/api/config", json={"collect_interval_seconds": 120}).status_code == 200
         config = client.get("/api/config").json()
         assert config["mode"] == "demo"
+        assert config["lmstat_path"] == "/tools/lmstat"
+        assert config["license_sources"] == [{"server": "27000@rd1", "vendor": "snpslmd"}]
         assert config["db_retention_days"] == 7
         assert config["db_max_size_mb"] == 1024
         summary = client.get("/api/summary").json()

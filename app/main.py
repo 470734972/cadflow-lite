@@ -122,7 +122,12 @@ class Runtime:
         )
 
     def update(self, payload: dict[str, Any]) -> dict[str, Any]:
-        candidate = RuntimeConfig.from_dict(payload)
+        # The LSF and FlexNet forms are saved independently. Treat this as a
+        # partial update so an LSF-form save cannot erase FlexNet fields that
+        # are deliberately absent from that form.
+        merged = self.config.to_dict()
+        merged.update(payload)
+        candidate = RuntimeConfig.from_dict(merged)
         candidate_service = self._make_service(candidate)
         # A real LSF configuration is validated before becoming the active configuration.
         if candidate.mode == "lsf":
@@ -293,7 +298,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.74", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.75", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
