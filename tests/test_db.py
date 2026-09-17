@@ -50,19 +50,22 @@ def test_license_status_history_retains_one_service_row_per_hour_after_detail_tr
     ]
 
 
-def test_terminal_jobs_are_retained_for_seven_days_independent_of_snapshots(tmp_path):
+def test_only_terminal_exit_jobs_are_retained_for_three_days(tmp_path):
     db = Database(tmp_path / "cadflow.db")
     db.initialize()
     seen = "2026-09-01T12:00:00+00:00"
     db.save_snapshot("eda", seen, {
-        "jobs": [{"job_id": "42", "user": "alice", "status": "DONE", "queue": "q", "exec_host": "h"}],
+        "jobs": [
+            {"job_id": "42", "user": "alice", "status": "DONE", "queue": "q", "exec_host": "h"},
+            {"job_id": "43", "user": "alice", "status": "EXIT", "queue": "q", "exec_host": "h"},
+        ],
         "queues": [], "hosts": [], "licenses": [],
     })
     db.save_snapshot("eda", "2026-09-01T12:01:00+00:00", {"jobs": [], "queues": [], "hosts": [], "licenses": []})
 
-    assert [(row["job_id"], row["status"]) for row in db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00")] == [("42", "DONE")]
+    assert [(row["job_id"], row["status"]) for row in db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00")] == [("43", "EXIT")]
 
-    db.cleanup("eda", retention_days=0, max_size_mb=0, now=datetime(2026, 9, 8, 12, 1, tzinfo=timezone.utc))
+    db.cleanup("eda", retention_days=0, max_size_mb=0, now=datetime(2026, 9, 4, 12, 1, tzinfo=timezone.utc))
 
     assert db.terminal_jobs("eda", "2026-08-25T00:00:00+00:00") == []
 

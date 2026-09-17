@@ -293,7 +293,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Ncc CAD Flow", version="0.3.72", lifespan=lifespan)
+app = FastAPI(title="Ncc CAD Flow", version="0.3.73", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -422,7 +422,7 @@ def jobs(
     queue: Optional[str] = None,
     limit: Optional[int] = Query(None, ge=1),
 ) -> list[dict]:
-    """Return current jobs plus retained DONE/EXIT jobs from the last 7 days.
+    """Return current jobs plus retained EXIT jobs from the last 3 days.
 
     By default the API returns the complete current snapshot, so the result
     count reflects what LSF reported instead of an application-imposed cap.
@@ -433,7 +433,7 @@ def jobs(
     current_ids = {str(row.get("job_id", "")) for row in current_rows}
     terminal_rows = [
         {**row, "retained_terminal": True}
-        for row in runtime.db.terminal_jobs(runtime.config.cluster_name, (datetime.now(timezone.utc) - timedelta(days=7)).isoformat())
+        for row in runtime.db.terminal_jobs(runtime.config.cluster_name, (datetime.now(timezone.utc) - timedelta(days=3)).isoformat())
         if str(row.get("job_id", "")) not in current_ids
     ]
     rows = [*current_rows, *terminal_rows]

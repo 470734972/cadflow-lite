@@ -102,8 +102,8 @@ CREATE TABLE IF NOT EXISTS licenses (
 );
 
 -- Terminal job rows are compact, independent records.  They survive the
--- normal current-snapshot trimming so operators can inspect recent DONE/EXIT
--- work without retaining every RUN/PEND snapshot for a week.
+-- normal current-snapshot trimming so operators can inspect recent failed
+-- work without retaining every RUN/PEND/DONE snapshot for days.
 CREATE TABLE IF NOT EXISTS terminal_jobs (
     cluster TEXT NOT NULL,
     job_id TEXT NOT NULL,
@@ -330,10 +330,13 @@ class Database:
                         cursor = conn.execute(f"DELETE FROM snapshots WHERE id IN ({placeholders})", old_ids)
                         deleted += max(0, int(cursor.rowcount))
                     conn.execute("DELETE FROM license_status_history WHERE cluster=? AND hour_start < ?", (cluster, cutoff))
-                # Terminal jobs have a fixed operator-requested 7-day window,
+                # Only failed jobs have a fixed operator-requested 3-day window,
                 # independent of the configurable snapshot-detail retention.
-                terminal_cutoff = (now - timedelta(days=7)).isoformat()
-                conn.execute("DELETE FROM terminal_jobs WHERE cluster=? AND last_seen < ?", (cluster, terminal_cutoff))
+                terminal_cutoff = (now - timedelta(days=3)).isoformat()
+                conn.execute(
+                    "DELETE FROM terminal_jobs WHERE cluster=? AND (status<>'EXIT' OR last_seen < ?)",
+                    (cluster, terminal_cutoff),
+                )
                 conn.commit()
 
                 size_bytes = self._database_size_bytes()
@@ -400,7 +403,7 @@ class Database:
 
     @staticmethod
     def _save_terminal_jobs(conn: sqlite3.Connection, cluster: str, collected_at: str, rows: Iterable[dict[str, Any]]) -> None:
-        terminal_rows = [row for row in rows if str(row.get("status", "")).upper() in {"DONE", "EXIT"}]
+        terminal_rows = [row for row in rows if str(row.get("status", "")).upper() == "EXIT"]
         if not terminal_rows:
             return
         conn.executemany(
@@ -503,7 +506,7 @@ class Database:
     def terminal_jobs(self, cluster: str, since: str) -> list[dict[str, Any]]:
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT job_id, user, status, queue, exec_host, submit_host, job_name, submit_time, slots, runtime_seconds, pending_reason, project, first_seen, last_seen FROM terminal_jobs WHERE cluster=? AND last_seen>=? ORDER BY last_seen DESC",
+                "SELECT job_id, user, status, queue, exec_host, submit_host, job_name, submit_time, slots, runtime_seconds, pending_reason, project, first_seen, last_seen FROM terminal_jobs WHERE cluster=? AND status='EXIT' AND last_seen>=? ORDER BY last_seen DESC",
                 (cluster, since),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -518,7 +521,7 @@ class Database:
                 existing = {
                     str(row["job_id"])
                     for row in conn.execute(
-                        f"SELECT job_id FROM terminal_jobs WHERE cluster=? AND job_id IN ({placeholders}) AND detail<>''",
+                        f"SELECT job_id FROM terminal_jobs WHERE cluster=? AND job_id IN ({placeholders}) AND status='EXIT' AND detail<>''",
                         [cluster, *batch],
                     ).fetchall()
                 }
@@ -528,7 +531,7 @@ class Database:
     def terminal_job_detail(self, cluster: str, job_id: str) -> str:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT detail FROM terminal_jobs WHERE cluster=? AND job_id=?", (cluster, job_id)
+                "SELECT detail FROM terminal_jobs WHERE cluster=? AND job_id=? AND status='EXIT'", (cluster, job_id)
             ).fetchone()
             return str(row["detail"]) if row and row["detail"] else ""
 

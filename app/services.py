@@ -38,9 +38,9 @@ class CollectionService:
         collected_at = datetime.now(timezone.utc).isoformat()
         try:
             payload = self.collector.collect()
-            # Persist the long LSF report only for failures. DONE/EXIT rows
-            # themselves are both retained for seven days, but collecting
-            # ``bjobs -l`` for every successful job makes polling expensive.
+            # Persist the long LSF report only for failures. Successful DONE
+            # jobs stay in the current snapshot only, avoiding extra load from
+            # both long reports and multi-day terminal storage.
             terminal_jobs = [
                 row for row in payload.get("jobs", [])
                 if str(row.get("status", "")).upper() == "EXIT"
