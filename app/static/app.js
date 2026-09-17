@@ -170,3 +170,13 @@ async function openJobDetail(jobId){const modal=$('#jobDetailModal'),title=$('#j
 document.addEventListener('click',event=>{const button=event.target.closest('[data-job-detail]');if(button)openJobDetail(button.dataset.jobDetail);});
 $('#jobDetailClose').onclick=()=>{$('#jobDetailModal').hidden=true;};
 $('#jobDetailModal').onclick=event=>{if(event.target===$('#jobDetailModal'))$('#jobDetailModal').hidden=true;};
+const renderJobsWithStatusCounts=renderJobs;
+renderJobs=function(rows){
+  renderJobsWithStatusCounts(rows);
+  const countByStatus=allJobs.reduce((counts,job)=>{
+    const value=String(job.status||'').toUpperCase();
+    counts[value]=(counts[value]||0)+1;
+    return counts;
+  },{}),pendingCount=(countByStatus.PEND||0)+(countByStatus.PSUSP||0);
+  $('#jobResultCount').textContent=`全部 ${allJobs.length} · RUN ${countByStatus.RUN||0} · PEND ${pendingCount} · EXIT ${countByStatus.EXIT||0} · DONE ${countByStatus.DONE||0}`;
+};
